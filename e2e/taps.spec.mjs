@@ -101,7 +101,7 @@ test('End walk tapped twice: the walk is still there to save, and saving twice s
   await page.waitForFunction((at) => Math.abs(window.offScript.walk.player.time - at) < 0.5, t);
   await doubleTap(page, page.getByRole('button', { name: 'End walk' }));
   await expect(page.getByRole('heading', { name: 'How did it go?' })).toBeVisible();
-  await doubleTap(page, page.getByRole('button', { name: 'All good apart from the ticked ones' }), 30);
+  await doubleTap(page, page.getByRole('button', { name: 'Save my walk' }), 30);
   await expect(page.getByRole('heading', { name: 'Walk saved' })).toBeVisible();
   expect(await page.evaluate(() => window.offScript.events.filter((e) => e.mode === 'walk').length)).toBe(4);
 });

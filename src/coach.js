@@ -1,7 +1,7 @@
 // What the walk coach says. The same words go in the audio pack (tools/make-packs.mjs) and are read
 // aloud by the phone when there is no pack. labels: what the screen and the lock screen show.
 export const COACH = {
-  intro: 'Here is your walk. If you get a line wrong, or you are not sure, double tap your earbud. Be honest: that is how it works.',
+  intro: 'Here is your walk. Say your lines out loud. If you get a line wrong, or you are not sure, double tap your earbud. That shows the app what to bring back.',
   listen: 'New line. Just listen.',
   sayBack: 'Now you. Say it back.',
   again: 'Once more.',
@@ -10,7 +10,13 @@ export const COACH = {
   here: 'Here it is.',
   stage: 'Stage direction.',
   run: 'Now run those lines. Say each one when it is your turn.',
-  end: 'That is the walk. Look at your phone, and tick any you missed.',
+  end: 'That is the walk. Look at your phone, and tap any you missed.',
+};
+
+// With no audio pack the phone reads the tape, and marking is by the buttons on the screen.
+export const COACH_SPEECH = {
+  ...COACH,
+  intro: 'Here is your walk. Say your lines out loud. If you get a line wrong, or you are not sure, tap Missed. That shows the app what to bring back.',
 };
 
 export const STEPS = {
@@ -20,4 +26,7 @@ export const STEPS = {
   turn: 'Your turn: say your line',
   here: 'Check: did you get it right?',
   stage: 'Stage direction',
+  run: 'Now run those lines',
+  cue: 'Listen for your cue',
+  end: 'That is the walk',
 };

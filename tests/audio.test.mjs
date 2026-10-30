@@ -139,6 +139,8 @@ test('a walk of any length teaches a beat whole, both runs, or leaves it for ano
 
 test('after a walk its results are saved at the moments heard, and a later walk brings the new lines back', () => {
   const { app, manifest } = walkApp();
+  const newIds = [...app.model.beats[2].itemIds, ...app.model.beats[3].itemIds]; // today's beat and a head start
+  for (const id of newIds) app.states.set(id, { ...newState(id), proved: true }); // typed right, so a walk can move them on
   const tape = walk(app, manifest, 3600);
   const records = walkRecords(walkResults(tape, reviewRows(tape, new Set()), new Set()), { start: app.clock, getState: app.getState });
   records.forEach((rec) => app.save(rec));
@@ -148,7 +150,6 @@ test('after a walk its results are saved at the moments heard, and a later walk 
   assert.equal(records[0].event.active, Math.round(tape.trials[0].answerEnd * 10) / 10);
   const total = records.reduce((n, rec) => n + rec.event.active, 0);
   assert.ok(Math.abs(total - tape.trials.at(-1).answerEnd) < 0.06, `${total} against ${tape.trials.at(-1).answerEnd}`);
-  const newIds = [...app.model.beats[2].itemIds, ...app.model.beats[3].itemIds]; // today's beat and a head start
   assert.ok(newIds.every((id) => app.getState(id).status === 'review'));
   app.wait(90);
   const later = walk(app, manifest, 3600);
@@ -197,7 +198,8 @@ test('a cue made longer plays the lines before it from the pack; a new beat open
   const tape = walk(app, manifest, 3600);
   let t = 0;
   const timed = tape.steps.map((s) => ({ ...s, at: (t += s.dur) - s.dur }));
-  const before = (trial) => timed.filter((s) => s.clip && s.at >= trial.replayFrom - 1e-9 && s.at < trial.start - 1e-9).map((s) => s.clip);
+  const speakers = new Set(Object.values(manifest.speakers).map((ref) => ref.file)); // the role is said just before Your turn
+  const before = (trial) => timed.filter((s) => s.clip && !speakers.has(s.clip) && s.at >= trial.replayFrom - 1e-9 && s.at < trial.start - 1e-9).map((s) => s.clip);
   assert.equal(tape.parts[0].label, 'Check');
   const check = tape.trials.find((tr) => tr.id === ids[3]);
   const clips = (id) => manifest.items[id];
