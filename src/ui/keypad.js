@@ -4,10 +4,14 @@
 import { h, tooSoon } from './dom.js';
 import { KEY_ROWS as ROWS } from '../grade.js';
 
+// Shown with a typed line until the first key.
+export const TYPE_HINT = 'Not the whole word, just its first letter. For “The boat is late”, tap T B I L. Say or mouth each word as you tap. ? shows the next word.';
+
 export function keypad(onKey) {
   const el = h(
     'div',
     { class: 'keypad', role: 'group', 'aria-label': 'Keypad: tap the first letter of each word' },
+    h('p', { class: 'key-caption', 'aria-hidden': 'true' }, 'Tap the first letter of each word'),
     ROWS.map((row, i) =>
       h(
         'div',

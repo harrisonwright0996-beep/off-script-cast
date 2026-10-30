@@ -8,7 +8,8 @@ import { createSession, linesLeft } from '../session.js';
 import { createTypeCheck, onlySlip, sayMisses, makeResult, describeResult, repeatMisses, troubleNote } from '../grade.js';
 import { blankOf, firstLettersOf, gapsOf, lettersShown } from '../tokens.js';
 import { canSpeak, speak, stopSpeaking } from '../tts.js';
-import { keypad } from './keypad.js';
+import { keypad, TYPE_HINT } from './keypad.js';
+import { reminderOffer } from './offer.js';
 import { sync } from '../cast/reminders.js';
 import { scienceNote } from '../cast/science.js';
 
@@ -356,7 +357,7 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
       const check = createTypeCheck(tokens);
       const line = h('p', { class: 'line answer' });
       // Said or mouthed, a line is remembered better than in the head alone (the production effect).
-      const hint = h('p', { class: 'help' }, 'Say or mouth each word as you tap its first letter. ? shows the next word.');
+      const hint = h('p', { class: 'help' }, TYPE_HINT);
       const draw = () => clear(line).append(...tokenView(tokens, check.shownUpTo, new Set(check.misses)));
       draw();
       answerArea.append(line, hint);
@@ -375,7 +376,7 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
           missSaved = holdMiss(makeResult({ misses: check.misses, speakerWrong, mode: 'type' }));
         }
         if (!r.done) return;
-        const result = makeResult({ misses: check.misses, speakerWrong, mode: 'type', ms: timed(answerStart), firstMs });
+        const result = makeResult({ misses: check.misses, speakerWrong, mode: 'type', ms: timed(answerStart), firstMs, words: c.tested ? item.words : 0 });
         once(async () => {
           if (missSaved) await takeBack(await missSaved);
           await finish(c, result, { slipped: onlySlip(check, item.words, speakerWrong) });
@@ -390,7 +391,7 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     function sayAnswer() {
       // The line on show, there is no typing it from memory now.
       const onReveal = () => switchMode && switchMode.remove();
-      sayCheck(tokens, answerArea, footBox, 'Say it aloud, then reveal it.', (misses, ms) => finish(c, makeResult({ misses, speakerWrong, mode: 'say', ms })), onReveal);
+      sayCheck(tokens, answerArea, footBox, 'Say it aloud, then reveal it.', (misses, ms) => finish(c, makeResult({ misses, speakerWrong, mode: 'say', ms, words: c.tested ? item.words : 0 })), onReveal);
     }
   }
 
@@ -442,7 +443,7 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     const text = rec.help && result.pass ? RIGHT_WITH[c.step] : result.slip ? 'Counted right: a slip of the finger' : describeResult(result, c.item.tokens, c.item.speaker);
     const note = comesBack(rec);
     const earlier = ctx.events.filter((e) => e !== rec.event);
-    const trouble = result.pass ? null : troubleNote(c.item.tokens, repeatMisses(earlier, c.item.id, result.misses));
+    const trouble = !result.misses.length ? null : troubleNote(c.item.tokens, repeatMisses(earlier, c.item.id, result.misses));
     announce([`${text}.`, trouble, note].filter(Boolean).join(' '));
     feedback(c, result, text, note, slipped && !result.pass, trouble, rec);
   }
@@ -483,7 +484,7 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     );
     ctx.root.querySelector('footer .btn').focus({ preventScroll: true });
     keepInView(ctx.root, block);
-    if (result.pass && ctx.settings.autoAdvance) autoTimer = setTimeout(next, AUTO_ADVANCE_MS);
+    if (result.pass && !result.misses.length && ctx.settings.autoAdvance) autoTimer = setTimeout(next, AUTO_ADVANCE_MS);
   }
 
   async function doUndo() {
@@ -552,14 +553,16 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     const st = done();
     const said = st.answered ? statsLine(st) : 'Nothing left in this round.';
     if (short) {
-      return plain('Keep going?', [headline(said), h('p', {}, 'Starting is the hard part, and it is done.')], [
-        button('Another round', act(() => ctx.go('sprint')), { class: 'btn primary' }),
-        button('Stop for now', act(() => ctx.go('today'))),
-      ]);
+      return reminderOffer(ctx).then((offer) =>
+        plain('Keep going?', [headline(said), h('p', {}, 'Starting is the hard part, and it is done.'), offer], [
+          button('Another round', act(() => ctx.go('sprint')), { class: 'btn primary' }),
+          button('Stop for now', act(() => ctx.go('today'))),
+        ]),
+      );
     }
     const left = chosen ? linesLeft(session.state) : 0;
-    science().then((note) =>
-      plain('Round done', [headline(said), left ? h('p', {}, `${plural(left, 'line')} of this ${chosen.run ? 'run through' : 'practice'} still to go.`) : null, note], [
+    Promise.all([science(), reminderOffer(ctx)]).then(([note, offer]) =>
+      plain('Round done', [headline(said), left ? h('p', {}, `${plural(left, 'line')} of this ${chosen.run ? 'run through' : 'practice'} still to go.`) : null, offer, note], [
         left
           ? button('Carry on', act(() => ctx.go('sprint', { practice: 'resume' })), { class: 'btn primary' })
           : button('Another round', act(() => ctx.go('sprint')), { class: 'btn primary' }),
@@ -587,10 +590,12 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
       ]);
     }
     if (scope === 'tests') {
-      return plain('Checks done', [headline('Everything ready to check is done.'), said], [
-        button('Another round', act(() => ctx.go('sprint')), { class: 'btn primary' }),
-        button('Stop for now', act(() => ctx.go('today'))),
-      ]);
+      return reminderOffer(ctx).then((offer) =>
+        plain('Checks done', [headline('Everything ready to check is done.'), said, offer], [
+          button('Another round', act(() => ctx.go('sprint')), { class: 'btn primary' }),
+          button('Stop for now', act(() => ctx.go('today'))),
+        ]),
+      );
     }
     const keepGoing = (what) => carryOn(() => session.keepGoing(what));
     const footer = [
@@ -598,7 +603,7 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
       plan.extraRuns.length ? button('An extra run', act(() => keepGoing('runs')), { class: plan.ahead.length ? 'btn' : 'btn primary' }) : null,
       button('Stop for now', act(() => ctx.go('today'))),
     ].filter(Boolean);
-    science().then((note) => plain('All caught up', [headline('Everything ready for now is done.'), said, note], footer));
+    Promise.all([science(), reminderOffer(ctx)]).then(([note, offer]) => plain('All caught up', [headline('Everything ready for now is done.'), said, offer, note], footer));
   }
 
   const onVisibility = () => {

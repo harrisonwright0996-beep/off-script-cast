@@ -1004,3 +1004,11 @@ test('a line an undone answer put on show is not sold as counting: it asks for n
   assert.notEqual(c && c.mustType, true);
   assert.notEqual(s.advance().mustType, true);
 });
+
+test('a line of 8 words or more passes with one word wrong, counts, and grows less than a clean go', () => {
+  assert.equal(makeResult({ misses: [3], mode: 'type', words: 8 }).pass, true);
+  assert.equal(makeResult({ misses: [3], mode: 'type', words: 7 }).pass, false);
+  assert.equal(makeResult({ misses: [3, 4], mode: 'type', words: 12 }).pass, false);
+  assert.equal(makeResult({ misses: [3], speakerWrong: true, mode: 'type', words: 12 }).pass, false);
+  assert.equal(makeResult({ misses: [3], mode: 'type' }).pass, false, 'a first wrong key, not yet finished, is a miss');
+});

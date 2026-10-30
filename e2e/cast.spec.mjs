@@ -285,3 +285,57 @@ test('Starting a scene again keeps a saved walk that does not touch it, and drop
   });
   expect(kept).toEqual([true, false]);
 });
+
+test('the first round ends with the offer of reminders; an answer ends it everywhere, and leaving does not', async ({ page }) => {
+  // Test WebKit has no push, as a phone's browser has before the app is installed.
+  await page.addInitScript(() => {
+    window.PushManager ||= function () {};
+    window.Notification ||= function () {};
+  });
+  await enrol(page);
+  await page.getByRole('button', { name: 'No, start from the beginning' }).click();
+  await page.evaluate(() => (window.offScript.settings.sprintMinutes = 0.02));
+  await page.getByRole('button', { name: 'Start learning' }).click();
+  await page.waitForTimeout(1300);
+  await expect(async () => {
+    await answerCard(page);
+    await expect(page.getByRole('heading', { name: 'Round done' })).toBeVisible({ timeout: 300 });
+  }).toPass({ timeout: 30000 });
+  await expect(page.getByRole('button', { name: 'Yes, remind me' })).toBeVisible();
+  await page.getByRole('button', { name: 'Back to your lines' }).click();
+  await expect(page.getByRole('button', { name: 'Yes, remind me' })).toBeInViewport();
+  await page.getByRole('button', { name: 'Not now' }).click();
+  await expect(page.getByText('No reminders. You can turn them on in Settings.')).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Yes, remind me' })).toHaveCount(0);
+});
+
+test('typing is explained with the keypad; one wrong word on a long line passes, and the screen does not say why', async ({ page }) => {
+  await enrol(page);
+  await page.getByRole('button', { name: 'No, start from the beginning' }).click();
+  await page.evaluate(async () => {
+    const o = window.offScript;
+    await o.saveSettings({ mode: 'type' });
+    const it = o.model.items.find((x) => x.words >= 8);
+    const day = o.today();
+    o.states.set(it.id, { ...o.getState(it.id), status: 'review', firstDay: day, learnedDay: day, passes: 3, helped: 1, stability: 200, passDays: [day], lastResult: 'pass', lastDay: day, lastTime: Date.now() - 3600000, proved: true });
+    await o.store.putStates([o.states.get(it.id)]);
+    o.go('sprint', { custom: { itemIds: [it.id], help: 'none' } });
+  });
+  await expect(page.locator('.key-caption')).toHaveText('Tap the first letter of each word');
+  const hint = page.getByText('just its first letter', { exact: false });
+  await expect(hint).toBeVisible();
+  const keys = await keysOf(page);
+  const wrong = keys[1] === 'z' ? 'p' : 'z';
+  await page.locator(`.keypad [data-key="${keys[0]}"]`).click();
+  await expect(hint).toHaveCount(0);
+  await expect(page.locator('.key-caption')).toBeVisible();
+  await page.locator(`.keypad [data-key="${wrong}"]`).click();
+  for (const k of keys.slice(2)) await page.locator(`.keypad [data-key="${k}"]`).click();
+  await expect(page.locator('.result.perfect')).toHaveText(/Nearly word perfect\. Watch out for: /);
+  await expect(page.getByRole('button', { name: 'Undo last answer' })).toHaveCount(0);
+  expect(await page.evaluate(() => window.offScript.getState(window.offScript.card.item.id).proved)).toBe(true);
+  const seen = (await page.locator('main').innerText()).toLowerCase();
+  expect(seen).not.toMatch(/one (word|miss)|allowed|8 words|eight words|still (pass|count)/);
+});

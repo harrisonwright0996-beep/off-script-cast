@@ -398,6 +398,8 @@ export function createSession({ model, index, getPlan, getState, settings, scope
       // (Nor when an undone answer put the line on show: it cannot count this round.)
       c.mustType = !t.ladder && provable(t) && needsProof(s, dayNow()) && !(S.shown && S.shown[item.id]);
       c.spot = !t.ladder && spotCheck(s, S.goes, item.id);
+      // A test of a line already taught. While a line is being taught, every word counts.
+      c.tested = !t.ladder && !t.pretest && s.status !== 'new';
     }
     if (t.queue === 'beat' && t.kind === 'item' && !S.shuffleSaid) {
       S.message ||= SHUFFLE_MESSAGE;
@@ -480,7 +482,8 @@ export function createSession({ model, index, getPlan, getState, settings, scope
       const { k, typing } = plan();
       // Typed right from the cue alone, but more than twice as slowly a word as usual once under way.
       const perWord = typedPerWord(result, item);
-      const slow = result.pass && !help && !primed && !relearn && !result.slip && typing != null && perWord != null && perWord > SLOW * typing;
+      // A line right but for one word grows as little, so it comes back sooner.
+      const slow = result.pass && !help && !primed && !relearn && !result.slip && (result.misses.length > 0 || (typing != null && perWord != null && perWord > SLOW * typing));
       // A line put on show by an answer that was undone cannot prove itself straight after.
       const fair = provable(t) && !knownToday(prev, day) && !(S.shown && S.shown[id]);
       const proof = fair && earnsProof({ pass: result.pass, mode: result.mode, help, ladder: !!t.ladder, slip: !!result.slip });
@@ -521,7 +524,7 @@ export function createSession({ model, index, getPlan, getState, settings, scope
       }
       if (!help) {
         S.stats.answered += 1;
-        if (result.pass) S.stats.perfect += 1;
+        if (result.pass && !result.misses.length) S.stats.perfect += 1;
       }
       if (prev.status !== 'review' && state.status === 'review') {
         S.stats.learnedItems += 1;

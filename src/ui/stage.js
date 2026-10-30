@@ -2,7 +2,8 @@
 // no time to spend, no streaks: only the % and what to do now.
 import { h, clear, screen, button, announce, focusHeading, settled } from './dom.js';
 import { crossed, fadingCount, learntPercent, sceneLights } from '../cast/proof.js';
-import { canPush, enable, sync } from '../cast/reminders.js';
+import { sync } from '../cast/reminders.js';
+import { reminderOffer } from './offer.js';
 import { scienceNote } from '../cast/science.js';
 import { applyWaitingPack, refreshPack } from './unlock.js';
 
@@ -76,25 +77,9 @@ export function showStage(ctx) {
     else if (percent >= 100) body.push(h('p', { class: 'fading' }, 'You know every line. Keep them: lines fade if you stop using them.'));
     else if (plan.done) body.push(h('p', { class: 'fading' }, 'All caught up for now. Your brain needs the gap: it is part of how this works.'));
 
+    // Above the scenes, where it is seen without scrolling.
+    body.push(await reminderOffer(ctx));
     body.push(h('h2', {}, 'Your scenes'), lightsOf(lights));
-
-    // After the first round, once: the offer of reminders, from a tap as phones insist.
-    const practised = ctx.events.length > 0;
-    if (practised && canPush() && !(await ctx.store.get('push')) && !(await ctx.store.get('pushAsked'))) {
-      const box = h('div', { class: 'notice' });
-      const answer = async (yes) => {
-        await ctx.store.set('pushAsked', true);
-        const on = yes && (await enable(ctx).catch(() => false));
-        const said = h('p', { role: 'status', tabindex: '-1' }, yes && !on ? 'Reminders did not switch on. You can try again in Settings.' : on ? 'Reminders are on.' : 'No reminders. You can turn them on in Settings.');
-        clear(box).append(said);
-        said.focus(); // the button that had focus has gone
-      };
-      box.append(
-        h('p', {}, 'Want a nudge when your lines start to fade? Once you know them you will forget them unless you keep going, so a reminder really helps.'),
-        h('div', { class: 'row' }, button('Yes, remind me', settled(() => answer(true)), { class: 'btn primary' }), button('Not now', settled(() => answer(false)))),
-      );
-      body.push(box);
-    }
 
     const runIsMain = plan.done && !plan.ahead.length;
     const run = (opts) => button('Run through', () => ctx.go('choose', { run: true }), opts);

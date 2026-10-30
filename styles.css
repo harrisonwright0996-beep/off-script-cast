@@ -577,6 +577,12 @@ h1:focus-visible {
 
 /* The keypad: never the phone's own keyboard. Keys are an exception to 44 points across, as ten
    must fit a row; they are tall instead. */
+.key-caption {
+  margin: 0 0 6px;
+  text-align: center;
+  font-weight: 600;
+}
+
 .keypad {
   display: flex;
   flex-direction: column;

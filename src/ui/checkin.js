@@ -5,7 +5,7 @@
 // that scene.
 import { h, clear, screen, button, announce, focusHeading, plural, settled } from './dom.js';
 import { createTypeCheck, makeResult } from '../grade.js';
-import { keypad } from './keypad.js';
+import { keypad, TYPE_HINT } from './keypad.js';
 import { cueBlock, keepInView, newestWord, tokenView } from './sprint.js';
 import { cueOf } from '../items.js';
 import { applyKnown } from '../state.js';
@@ -78,11 +78,11 @@ export async function showCheckin(ctx, { intro = false } = {}) {
       announce(`${r.correct ? '' : 'Missed: '}${tokens[r.index].d}`);
       if (!r.done) return;
       quiet();
-      saved(pos, missesInRow, item, makeResult({ misses: check.misses, mode: 'type' }));
+      saved(pos, missesInRow, item, makeResult({ misses: check.misses, mode: 'type', words: item.words }));
     });
     show(
       ctx.model.scenes[item.scene].heading,
-      [lastResult(), h('p', { class: 'where' }, `Checking your lines: ${pos + 1} of ${queue.length}`), cueBlock(cueOf(ctx.index, item)), h('p', { class: 'speaker' }, item.speaker), line, h('p', { class: 'help' }, 'Tap the first letter of each word. ? shows the next word.')],
+      [lastResult(), h('p', { class: 'where' }, `Checking your lines: ${pos + 1} of ${queue.length}`), cueBlock(cueOf(ctx.index, item)), h('p', { class: 'speaker' }, item.speaker), line, h('p', { class: 'help' }, TYPE_HINT)],
       [pad.el, button('That is enough, teach me', settled(finish), { class: 'btn link' })],
       'keyboard',
     );
@@ -98,7 +98,7 @@ export async function showCheckin(ctx, { intro = false } = {}) {
       await ctx.saveAnswer({ event: { time, day: state.lastDay, id: item.id, pass: true, mode: 'type', queue: 'known', misses: 0, speakerWrong: false, relearn: false, prev }, state });
     }
     const inRow = result.pass ? 0 : missesInRow + 1;
-    last = { pass: result.pass, text: result.pass ? 'Word perfect.' : 'Not this one yet. You will learn it.' };
+    last = { pass: result.pass, text: !result.pass ? 'Not this one yet. You will learn it.' : result.misses.length ? 'Nearly word perfect.' : 'Word perfect.' };
     if (inRow < STOP_AFTER) return next(pos + 1, inRow);
     const skip = queue.findIndex((id, i) => i > pos && ctx.index.byId.get(id).scene !== item.scene);
     const to = skip < 0 ? queue.length : skip;

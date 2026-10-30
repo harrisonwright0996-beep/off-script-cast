@@ -311,7 +311,9 @@ async function provedCard(page, words = 3) {
   const id = await page.evaluate(async (words) => {
     const o = window.offScript;
     await o.saveSettings({ mode: 'type' });
-    const it = o.model.items.find((x) => x.words >= words);
+    const { spotCheck } = await import('./src/cast/proof.js');
+    // On a longer line one word wrong still passes, and a spot check has no Say it instead.
+    const it = o.model.items.find((x) => x.words >= words && x.words < 8 && !spotCheck({ status: 'review' }, 0, x.id));
     const day = o.today();
     o.states.set(it.id, { ...o.getState(it.id), status: 'review', firstDay: day, learnedDay: day, passes: 3, helped: 1, stability: 200, passDays: [day], lastResult: 'pass', lastDay: day, lastTime: Date.now() - 3600000, proved: true });
     await o.store.putStates([o.states.get(it.id)]);
