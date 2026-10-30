@@ -227,7 +227,7 @@ export function makeBeats(sceneItems) {
 export function indexModel(model) {
   const byId = new Map(model.items.map((it) => [it.id, it]));
   const beatById = new Map(model.beats.map((b) => [b.id, b]));
-  return { byId, beatById, cues: uniqueCues(model) };
+  return { byId, beatById, cues: model.cues ? new Map(Object.entries(model.cues)) : uniqueCues(model) };
 }
 
 // The cue to show or play for a line: made longer if it would lead to more than one line.

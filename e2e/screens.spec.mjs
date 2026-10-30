@@ -5,7 +5,7 @@ const shot = (page, name) => page.screenshot({ path: `shots/${test.info().projec
 
 test('scenes and the reader: numbers, brackets, on screen text; learn a scene next; run it', async ({ page }) => {
   await importScript(page);
-  await page.getByRole('button', { name: 'Scenes' }).click();
+  await page.getByRole('button', { name: 'My lines' }).click();
   await page.getByRole('button', { name: /Scene 3: Landfall/ }).click();
   await expect(page.getByRole('heading', { name: 'Scene 3: Landfall' })).toBeVisible();
   await page.getByRole('button', { name: 'Learn this scene next' }).click();
@@ -13,8 +13,7 @@ test('scenes and the reader: numbers, brackets, on screen text; learn a scene ne
   expect(await page.evaluate(() => window.offScript.index.beatById.get(window.offScript.plan().newBeats[0]).scene)).toBe(3);
   await page.getByRole('button', { name: 'Back', exact: true }).click();
   await page.getByRole('button', { name: /Scene 1: The Harbour/ }).click();
-  await expect(page.locator('.reader')).toContainText('[On screen] Phone New message: where are you?');
-  await expect(page.locator('.reader')).toContainText('[She reads it.]');
+  await expect(page.locator('.reader')).not.toContainText('[On screen] Phone New message: where are you?'); // only what the member speaks
   await expect(page.locator('.reader .n').first()).toHaveText('1');
   await shot(page, 'reader');
   await page.getByRole('button', { name: 'Try a run of this scene' }).click();
@@ -30,7 +29,7 @@ test('settings: look changes at once; back up, restore, remove everything', asyn
     Object.defineProperty(navigator, 'canShare', { value: undefined });
   });
   await importScript(page);
-  await page.getByRole('button', { name: 'Start sprint' }).click();
+  await page.getByRole('button', { name: 'Start learning' }).click();
   for (let i = 0; i < 10; i++) await answerCard(page); // the first beat read, then into its run
   await page.getByRole('button', { name: 'Stop' }).click();
   await page.getByRole('button', { name: 'Settings' }).click();
@@ -45,7 +44,7 @@ test('settings: look changes at once; back up, restore, remove everything', asyn
   await page.getByRole('button', { name: 'Back up progress' }).click();
   const file = await (await download).path();
   const backup = JSON.parse(readFileSync(file, 'utf8'));
-  expect(backup.app).toBe('off-script');
+  expect(backup.app).toBe('off-script-cast');
   expect(backup.states.length).toBeGreaterThan(0);
   const states = await page.evaluate(() => window.offScript.states.size);
 
@@ -60,7 +59,7 @@ test('settings: look changes at once; back up, restore, remove everything', asyn
   await chooseFile(page, 'Restore a backup', { name: 'Off Script progress.json', mimeType: 'application/json', buffer: readFileSync(file) });
   await expect(page.getByRole('heading', { name: 'Restore this backup?' })).toBeVisible();
   await page.getByRole('button', { name: 'Restore', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Today', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
   expect(await page.evaluate(() => window.offScript.states.size)).toBe(states);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 });
@@ -77,17 +76,17 @@ const kept = (page, scene = null) =>
     };
   }, scene);
 
-test('start again from 0%: every line back to not started; the script, audio pack and settings stay', async ({ page }) => {
+test('start again from 0%: every line back to not started; the lines, audio and settings stay', async ({ page }) => {
   await importScript(page);
   await importPack(page);
-  await page.getByRole('button', { name: 'Start sprint' }).click();
+  await page.getByRole('button', { name: 'Start learning' }).click();
   for (let i = 0; i < 10; i++) await answerCard(page); // the first beat read, then into its run
   await page.getByRole('button', { name: 'Stop' }).click();
   await page.getByRole('button', { name: 'Settings' }).click();
   await page.getByLabel('Colours').selectOption({ label: 'Dark' });
   await page.getByRole('button', { name: 'Start again from 0%' }).click();
   await expect(page.getByRole('heading', { name: 'Start again from 0%?' })).toBeVisible();
-  await expect(page.getByText('The script, the audio pack, your dates and your settings stay.', { exact: false })).toBeVisible();
+  await expect(page.getByText('Your lines, audio and settings stay.', { exact: false })).toBeVisible();
   await shot(page, 'start-again');
   await page.getByRole('button', { name: 'Keep my progress' }).click();
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
@@ -95,29 +94,29 @@ test('start again from 0%: every line back to not started; the script, audio pac
 
   await page.getByRole('button', { name: 'Start again from 0%' }).click();
   await page.getByRole('button', { name: 'Start again from 0%' }).click();
-  await expect(page.getByRole('heading', { name: 'Today', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
   expect(await kept(page)).toEqual({ states: 0, answers: 0, saved: 0 });
   expect(await page.evaluate(() => [window.offScript.states.size, window.offScript.events.length])).toEqual([0, 0]);
 
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Today', exact: true })).toBeVisible(); // the script stays
+  await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible(); // the script stays
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark'); // and the settings
   await page.getByRole('button', { name: 'Settings' }).click();
-  await expect(page.getByText('Audio pack: every line has audio', { exact: false })).toBeVisible(); // and the audio pack
+  expect(await page.evaluate(() => !!window.offScript.manifest)).toBe(true); // and the audio
   await expect(page.getByRole('button', { name: 'Start again from 0%' })).toHaveCount(0); // nothing to start again
   await page.getByRole('button', { name: 'Back', exact: true }).click();
-  await page.getByRole('button', { name: 'Start sprint' }).click();
+  await page.getByRole('button', { name: 'Start learning' }).click();
   await expect(page.getByText('Start of Prologue')).toBeVisible(); // from the first line again
 });
 
 test('start this scene again: its lines go back to not started, other scenes keep theirs', async ({ page }) => {
   await importScript(page);
-  await page.getByRole('button', { name: 'Start sprint' }).click();
+  await page.getByRole('button', { name: 'Start learning' }).click();
   await page.getByRole('button', { name: 'Try it' }).click();
   await page.waitForFunction(() => window.offScript.card.step === 'floor');
   await answerCard(page); // the Prologue's first line, right at the first try
   await page.getByRole('button', { name: 'Stop' }).click();
-  await page.getByRole('button', { name: 'Choose what to practise' }).click();
+  await page.getByRole('button', { name: 'Choose' }).click();
   await page.getByLabel('Where').selectOption({ label: 'Scene 1: The Harbour' });
   await page.getByLabel('Which lines').selectOption({ label: 'Every line' });
   await page.getByLabel('How much help').selectOption({ label: 'No help' });
@@ -128,7 +127,7 @@ test('start this scene again: its lines go back to not started, other scenes kee
   expect(prologue.states).toBe(1);
   expect((await kept(page, 1)).states).toBe(3);
 
-  await page.getByRole('button', { name: 'Scenes' }).click();
+  await page.getByRole('button', { name: 'My lines' }).click();
   await page.getByRole('button', { name: /Prologue/ }).click();
   await expect(page.getByRole('button', { name: 'Start this scene again' })).toBeVisible();
   await page.getByRole('button', { name: 'Back', exact: true }).click();

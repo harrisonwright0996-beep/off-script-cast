@@ -30,7 +30,7 @@ const moved = (page, key) => page.waitForFunction((k) => window.offScript.card &
 
 test('Next after reading a line, tapped twice: the next rung is on show, not answered', async ({ page }) => {
   await importScript(page);
-  await page.getByRole('button', { name: 'Start sprint' }).click();
+  await page.getByRole('button', { name: 'Start learning' }).click();
   await page.getByRole('button', { name: 'Teach me' }).click();
   await expect(page.getByText('We are the ones who stayed.', { exact: false })).toBeVisible();
   await doubleTap(page, page.getByRole('button', { name: 'Next', exact: true }));
@@ -40,7 +40,7 @@ test('Next after reading a line, tapped twice: the next rung is on show, not ans
 
 test('Reveal tapped twice: Done still waits for its own tap', async ({ page }) => {
   await importScript(page);
-  await page.getByRole('button', { name: 'Start sprint' }).click();
+  await page.getByRole('button', { name: 'Start learning' }).click();
   for (let i = 0; i < 20 && (await page.locator('h1').textContent()) === 'New'; i++) await answerCard(page);
   await expect(page.getByRole('heading', { name: 'Learning', exact: true })).toBeVisible();
   await doubleTap(page, page.getByRole('button', { name: 'Reveal' }));
@@ -52,7 +52,7 @@ test('Reveal tapped twice: Done still waits for its own tap', async ({ page }) =
 
 test('the slip button tapped twice: only that answer is counted right, the miss before it stays a miss', async ({ page }) => {
   await importScript(page);
-  await page.getByRole('button', { name: 'Start sprint' }).click();
+  await page.getByRole('button', { name: 'Start learning' }).click();
   // On to the next line tried from the cue alone (reading any line shown on the way), then typed.
   const answer = async (typed) => {
     for (let c = await card(page); c.step !== 'floor'; c = await card(page)) {

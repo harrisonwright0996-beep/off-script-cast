@@ -740,3 +740,61 @@ h1:focus-visible {
   margin-top: 0.1em;
   accent-color: var(--missed);
 }
+
+/* The stage: the cast app's own theme. A dark house, warm light. */
+:root[data-theme='stage'] {
+  color-scheme: dark;
+  --bg: #14131f;
+  --surface: #201e30;
+  --raised: #2e2b44;
+  --text: #f6f1e4;
+  --muted: #cfc8d8;
+  --border: #8f88a6;
+  --accent: #ffc857;
+  --on-accent: #1a1608;
+  --perfect: #7fe0a4;
+  --learning: #ffc857;
+  --missed: #ff9db5;
+  --perfect-fill: #7fe0a4;
+  --learning-fill: #ffc857;
+  --missed-fill: #ff9db5;
+  --focus: #ffc857;
+}
+
+.ring {
+  --pc: 0;
+  width: 11em;
+  height: 11em;
+  margin: 1em auto;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(closest-side, var(--bg) 79%, transparent 80%), conic-gradient(var(--accent) calc(var(--pc) * 1%), var(--raised) 0);
+}
+.ring-num { font-size: 2.6em; font-weight: 700; line-height: 1.1; }
+.ring-word { color: var(--muted); }
+.fading { text-align: center; font-weight: 600; }
+
+.lights { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5em; }
+.light { display: flex; align-items: center; gap: 0.75em; padding: 0.5em 0.75em; background: var(--surface); border: 1px solid var(--border); border-radius: 0.6em; }
+.lamp { flex: none; width: 1.1em; height: 1.1em; border-radius: 50%; background: var(--accent); }
+.light.lit .lamp { box-shadow: 0 0 0.9em 0.2em var(--accent); }
+.light-name { flex: 1; }
+.light-pc { font-weight: 600; }
+
+.moment { text-align: center; padding: 1em; margin-bottom: 1em; border: 2px solid var(--accent); border-radius: 0.8em; background: var(--surface); animation: lights-up 900ms ease-out; }
+.moment-big { font-size: 2.2em; font-weight: 700; margin: 0; color: var(--accent); }
+@keyframes lights-up {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .moment { animation: none; }
+}
+
+.spot { font-weight: 700; color: var(--accent); }
+.science { padding: 0.75em 1em; border-left: 4px solid var(--accent); background: var(--surface); }
+.guide { font-size: 1.5em; font-weight: 700; text-align: center; }
+.all-steps h2 { margin-top: 1.25em; }

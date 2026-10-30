@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeApp, learn } from './helpers.mjs';
 import { phaseOf, recallGate, dayOrder, beatStage, untilText, paceOf, activeTime, buildPlan, typingPace, typedPerWord, FRONT_LOAD, UPKEEP_NOTE } from '../src/plan.js';
-import { DEFAULT_SETTINGS } from '../src/settings.js';
+import { TEST_SETTINGS as DEFAULT_SETTINGS } from './helpers.mjs';
 import { newState } from '../src/state.js';
 import { HOUR } from '../src/memory.js';
 

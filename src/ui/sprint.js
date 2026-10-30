@@ -7,8 +7,9 @@ import { createSession, linesLeft } from '../session.js';
 import { createTypeCheck, sayMisses, makeResult, describeResult, repeatMisses, troubleNote } from '../grade.js';
 import { blankOf, firstLettersOf, gapsOf, lettersShown } from '../tokens.js';
 import { canSpeak, speak, stopSpeaking } from '../tts.js';
-import { untilText } from '../plan.js';
 import { keypad } from './keypad.js';
+import { sync } from '../cast/reminders.js';
+import { scienceNote } from '../cast/science.js';
 
 const SAVED = 'sprint';
 export const PRACTICE = 'practice'; // a chosen practice, saved apart from the day's sprint
@@ -27,6 +28,14 @@ export function tokenView(tokens, upTo = tokens.length, misses = new Set()) {
     out.push(t.a);
   }
   return out;
+}
+
+// The cue: who speaks and what they say, or the start of a scene. A cue made longer, so that only
+// one line fits, shows the lines before it too, and which time it comes if the exchange repeats.
+export function cueBlock(cue) {
+  const say = (l) => (l.speaker === null ? h('p', {}, `Start of ${l.text}`) : h('p', {}, h('strong', {}, l.speaker), ': ', l.text));
+  const nth = cue.nth ? h('p', { class: 'note' }, `The ${ORDINALS[cue.nth - 1] || `number ${cue.nth}`} time these lines come in the scene.`) : null;
+  return h('div', { class: 'cue' }, h('p', { class: 'cue-label' }, 'Cue'), (cue.lines || [cue]).map(say), cue.notes.map((n) => h('p', { class: 'note' }, n)), nth);
 }
 
 const blankView = (t, drawn = blankOf(t)) => h('span', { class: 'blank' }, h('span', { 'aria-hidden': 'true' }, drawn), h('span', { class: 'visually-hidden' }, ` ${blankOf(t).replace('_', 'blank')} `));
@@ -155,27 +164,12 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     stopSpeaking();
   }
 
-  function timeBar() {
-    const left = Math.max(0, length - elapsed);
-    const fill = h('div', { class: 'timebar-fill', style: { width: `${(100 * left) / length}%` } });
-    const mins = Math.max(1, Math.ceil(left / 60000));
-    return h('div', { class: 'timebar', role: 'img', 'aria-label': `Sprint time: about ${plural(mins, 'minute')} left` }, fill);
-  }
-
   function where(c) {
     const it = c.item;
     const part = it.parts > 1 ? `, part ${it.part + 1} of ${it.parts}` : '';
     if (c.progress) return h('p', { class: 'where' }, `Line ${c.progress.pos} of ${c.progress.total}, speech ${it.n}${part}`);
     const rung = c.rung ? `, step ${c.rung.pos} of ${c.rung.total}` : '';
     return h('p', { class: 'where' }, `${heading(it.scene)}, speech ${it.n}${part}${rung}`);
-  }
-
-  // The cue: who speaks and what they say, or the start of a scene. A cue made longer, so that only
-  // one line fits, shows the lines before it too, and which time it comes if the exchange repeats.
-  function cueBlock(cue) {
-    const say = (l) => (l.speaker === null ? h('p', {}, `Start of ${l.text}`) : h('p', {}, h('strong', {}, l.speaker), ': ', l.text));
-    const nth = cue.nth ? h('p', { class: 'note' }, `The ${ORDINALS[cue.nth - 1] || `number ${cue.nth}`} time these lines come in the scene.`) : null;
-    return h('div', { class: 'cue' }, h('p', { class: 'cue-label' }, 'Cue'), (cue.lines || [cue]).map(say), cue.notes.map((n) => h('p', { class: 'note' }, n)), nth);
   }
 
   const readAloud = (text) =>
@@ -199,7 +193,7 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
   function frame(c, content, footer, footerClass = '') {
     quiet();
     const actions = undo.length ? [button('Undo', act(doUndo), { class: 'btn link', aria: 'Undo last answer' })] : [];
-    const body = [timeBar(), where(c), c.message ? h('p', { class: 'message', role: 'status' }, c.message) : null, ...content];
+    const body = [where(c), c.message ? h('p', { class: 'message', role: 'status' }, c.message) : null, ...content];
     clear(ctx.root).append(screen({ title: c.label, back: act(stop), backLabel: 'Stop', actions, body, footer, footerClass, className: 'sprint' }));
     window.scrollTo(0, 0); // each card starts at its cue
   }
@@ -293,20 +287,25 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     const speakerArea = h('div', { class: 'speaker-area' });
     const answerArea = h('div', { class: 'answer-area', role: 'group', tabindex: '-1', 'aria-label': 'Your line' });
     const footBox = h('div', { class: 'stack-foot' });
-    const switchMode = button(mode === 'type' ? 'Say it instead' : 'Type it instead', act(() => {
-      mode = mode === 'type' ? 'say' : 'type';
-      ctx.saveSettings({ mode });
-      floor(c);
-      focusHeading(ctx.root);
-    }), { class: 'btn link' });
+    // Some goes have to be typed: saying a line is on trust, and these are the ones that count.
+    const locked = !!(c.mustType || c.spot);
+    const switchMode = locked
+      ? null
+      : button(mode === 'type' ? 'Say it instead' : 'Type it instead', act(() => {
+          mode = mode === 'type' ? 'say' : 'type';
+          ctx.saveSettings({ mode });
+          floor(c);
+          focusHeading(ctx.root);
+        }), { class: 'btn link' });
+    const spot = locked ? h('p', { class: 'spot', role: 'status' }, c.spot ? 'Spot check: type this one.' : 'Type this one to prove you know it.') : null;
 
-    frame(c, [cueBlock(c.cue), speakerArea, answerArea, switchMode], [footBox]);
+    frame(c, [cueBlock(c.cue), spot, speakerArea, answerArea, switchMode], [footBox]);
     const foot = ctx.root.querySelector('footer');
 
     let answerStart = 0;
     const startAnswer = () => {
       answerStart = Date.now();
-      if (mode === 'type') typeAnswer();
+      if (locked || mode === 'type') typeAnswer();
       else sayAnswer();
       drawn(); // the keypad, or Reveal, comes up
     };
@@ -468,11 +467,19 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
 
   function plain(title, body, footer) {
     quiet();
-    clear(ctx.root).append(screen({ title, back: act(stop), backLabel: 'Today', body, footer }));
+    clear(ctx.root).append(screen({ title, back: act(stop), backLabel: 'My lines', body, footer }));
     focusHeading(ctx.root);
   }
 
   const done = () => minus(session.stats, startStats);
+
+  // One short note on why this works, a different one each round.
+  async function science() {
+    const seen = (await ctx.store.get('seen')) || { percent: 0, lit: [], notes: 0 };
+    await ctx.store.set('seen', { ...seen, notes: seen.notes + 1 });
+    sync(ctx);
+    return h('p', { class: 'science' }, scienceNote(seen.notes));
+  }
 
   function timeIsUp() {
     finished = true;
@@ -480,65 +487,53 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     saveSprint();
     const st = done();
     if (short) {
-      return plain('Keep going?', [h('p', { class: 'lead' }, statsLine(st)), h('p', {}, 'That was 2 minutes. Starting is the hard part, and it is done.')], [
-        button('Start a sprint', act(() => ctx.go('sprint')), { class: 'btn primary' }),
+      return plain('Keep going?', [h('p', { class: 'lead' }, statsLine(st)), h('p', {}, 'Starting is the hard part, and it is done.')], [
+        button('Another round', act(() => ctx.go('sprint')), { class: 'btn primary' }),
         button('Stop for now', act(() => ctx.go('today'))),
       ]);
     }
-    const mins = ctx.settings.breakMinutes;
-    const fill = h('div', { class: 'timebar-fill', style: { width: '0%' } });
-    const bar = h('div', { class: 'timebar', role: 'img', 'aria-label': `Break: ${plural(mins, 'minute')}` }, fill);
-    const status = h('p', {}, `${plural(mins, 'minute')}. Stand up, drink some water, look into the distance.`);
-    const began = Date.now();
-    breakTimer = setInterval(() => {
-      const share = Math.min(1, (Date.now() - began) / (mins * 60000));
-      fill.style.width = `${share * 100}%`;
-      if (share >= 1) {
-        clearInterval(breakTimer);
-        status.textContent = 'Break over. Ready when you are.';
-      }
-    }, 10000);
     const left = chosen ? linesLeft(session.state) : 0;
-    plain('Sprint done', [h('p', { class: 'lead' }, statsLine(st)), left ? h('p', {}, `${plural(left, 'line')} of this ${chosen.run ? 'run through' : 'practice'} still to go.`) : null, h('h2', {}, 'Break'), bar, status], [
-      left
-        ? button('Carry on', act(() => ctx.go('sprint', { practice: 'resume' })), { class: 'btn primary' })
-        : button('Another sprint', act(() => ctx.go('sprint')), { class: 'btn primary' }),
-      button('Stop for now', act(() => ctx.go('today'))),
-    ]);
+    science().then((note) =>
+      plain('Round done', [h('p', { class: 'lead' }, statsLine(st)), left ? h('p', {}, `${plural(left, 'line')} of this ${chosen.run ? 'run through' : 'practice'} still to go.`) : null, note], [
+        left
+          ? button('Carry on', act(() => ctx.go('sprint', { practice: 'resume' })), { class: 'btn primary' })
+          : button('Another round', act(() => ctx.go('sprint')), { class: 'btn primary' }),
+        button('Back to my lines', act(() => ctx.go('today'))),
+      ]),
+    );
   }
 
   function planDone() {
     const st = done();
     const plan = ctx.plan();
-    const nextCheck = plan.nextAt ? h('p', {}, `The next check is ready ${untilText(plan.nextAt, Date.now(), plan.day)}.`) : null;
     const said = st.answered ? h('p', {}, statsLine(st)) : null;
     if (chosen) {
       return plain(chosen.run ? 'Run through done' : 'Practice done', [h('p', { class: 'lead' }, `${chosen.title}.`), said], [
         chosen.run
           ? button('Run through again', act(() => ctx.go('choose', { run: true })), { class: 'btn primary' })
           : button('Choose again', act(() => ctx.go('choose')), { class: 'btn primary' }),
-        button('Today', act(() => ctx.go('today'))),
+        button('Back to my lines', act(() => ctx.go('today'))),
       ]);
     }
     if (custom) {
       return plain('Run done', [h('p', { class: 'lead' }, `That was a run of ${heading(custom.scene)}.`), said], [
         button('Back to the scene', act(() => ctx.go('reader', { scene: custom.scene })), { class: 'btn primary' }),
-        button('Today', act(() => ctx.go('today'))),
+        button('Back to my lines', act(() => ctx.go('today'))),
       ]);
     }
     if (scope === 'tests') {
-      return plain('Checks done', [h('p', { class: 'lead' }, 'Everything ready to check is done.'), nextCheck, said], [
-        button('Start a sprint', act(() => ctx.go('sprint')), { class: 'btn primary' }),
+      return plain('Checks done', [h('p', { class: 'lead' }, 'Everything ready to check is done.'), said], [
+        button('Another round', act(() => ctx.go('sprint')), { class: 'btn primary' }),
         button('Stop for now', act(() => ctx.go('today'))),
       ]);
     }
     const keepGoing = (what) => carryOn(() => session.keepGoing(what));
     const footer = [
-      plan.ahead.length ? button('Head start on tomorrow', act(() => keepGoing('new')), { class: 'btn primary' }) : null,
+      plan.ahead.length ? button('Learn more now', act(() => keepGoing('new')), { class: 'btn primary' }) : null,
       plan.extraRuns.length ? button('An extra run', act(() => keepGoing('runs')), { class: plan.ahead.length ? 'btn' : 'btn primary' }) : null,
       button('Stop for now', act(() => ctx.go('today'))),
     ].filter(Boolean);
-    plain("Today's plan is done", [h('p', { class: 'lead' }, 'Everything ready for now is done.'), nextCheck, said, h('p', {}, 'Keep going?')], footer);
+    science().then((note) => plain('All caught up', [h('p', { class: 'lead' }, 'Everything ready for now is done.'), said, note], footer));
   }
 
   const onVisibility = () => {

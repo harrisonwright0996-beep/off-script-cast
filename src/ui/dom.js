@@ -72,5 +72,22 @@ export function focusHeading(root) {
   if (h1) h1.focus({ preventScroll: true });
 }
 
+// The phone's file picker. Resolves to the file, or null if cancelled.
+export function pickFile(accept) {
+  return new Promise((resolve) => {
+    const input = h('input', { type: 'file', accept: accept || undefined, class: 'visually-hidden', 'aria-hidden': 'true', tabindex: '-1' });
+    input.addEventListener('change', () => {
+      resolve(input.files && input.files[0] ? input.files[0] : null);
+      input.remove();
+    });
+    input.addEventListener('cancel', () => {
+      resolve(null);
+      input.remove();
+    });
+    document.body.append(input);
+    input.click();
+  });
+}
+
 export const num = (n) => Math.round(n).toLocaleString('en-GB');
 export const plural = (n, one, many = one + 's') => `${num(n)} ${n === 1 ? one : many}`;

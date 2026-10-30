@@ -8,8 +8,9 @@ import { fitFactor } from './memory.js';
 import { dayKey, addDays } from './dates.js';
 import { clear, focusHeading } from './ui/dom.js';
 import { showInstall, needsInstall } from './ui/install.js';
-import { showSetup } from './ui/setup.js';
-import { showToday } from './ui/today.js';
+import { showUnlock } from './ui/unlock.js';
+import { showCheckin } from './ui/checkin.js';
+import { showStage } from './ui/stage.js';
 import { showSprint } from './ui/sprint.js';
 import { showScenes, showReader } from './ui/scenes.js';
 import { showSettings } from './ui/settings.js';
@@ -17,7 +18,7 @@ import { showWalk } from './ui/walk.js';
 import { showChoose } from './ui/choose.js';
 import { showStartAgain } from './ui/again.js';
 
-const SCREENS = { install: showInstall, setup: showSetup, today: showToday, sprint: showSprint, scenes: showScenes, reader: showReader, settings: showSettings, walk: showWalk, choose: showChoose, again: showStartAgain };
+const SCREENS = { install: showInstall, unlock: showUnlock, checkin: showCheckin, today: showStage, sprint: showSprint, scenes: showScenes, reader: showReader, settings: showSettings, walk: showWalk, choose: showChoose, again: showStartAgain };
 const EVENT_DAYS = 9; // the plan looks back this far
 
 export function applyLook(s) {
@@ -42,8 +43,11 @@ async function boot() {
     events: [],
     eventsFrom: null,
     manifest: (await store.get('manifest')) || null,
+    keys: (await store.get('keys')) || null,
+    member: (await store.get('member')) || null,
     update: null, // a waiting service worker, when a new version is ready
     cleanup: null,
+    nav: 0,
     fit: { k: 1, n: 0 }, // his forgetting curve factor, refitted when a sprint or walk starts
 
     getState: (id) => ctx.states.get(id) || newState(id),
@@ -102,9 +106,10 @@ async function boot() {
     },
 
     async go(name, params = {}) {
+      ctx.nav += 1; // a screen still drawing can tell it has been left
       if (ctx.cleanup) ctx.cleanup();
       ctx.cleanup = null;
-      if (ctx.model && name !== 'install' && name !== 'setup') await ctx.refreshEvents();
+      if (ctx.model && name !== 'install' && name !== 'unlock') await ctx.refreshEvents();
       clear(ctx.root);
       const result = await SCREENS[name](ctx, params);
       if (typeof result === 'function') ctx.cleanup = result;
@@ -130,7 +135,7 @@ async function boot() {
   registerServiceWorker(ctx);
 
   if (needsInstall()) return ctx.go('install');
-  return ctx.go(model ? 'today' : 'setup');
+  return ctx.go(model ? 'today' : 'unlock');
 }
 
 function registerServiceWorker(ctx) {
@@ -158,6 +163,6 @@ function registerServiceWorker(ctx) {
 
 boot().catch((err) => {
   const root = document.getElementById('app');
-  root.textContent = 'Off Script could not start. Close it and open it again. If this keeps happening, storage may be full.';
+  root.textContent = 'Off Script could not start. Close it and open it again. If this keeps happening, your phone may be short of space.';
   console.error(err);
 });

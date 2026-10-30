@@ -41,5 +41,5 @@ test('files that are not backups are refused plainly', () => {
   };
   assert.equal(code('not json'), 'not-json');
   assert.equal(code('{"app":"other"}'), 'not-backup');
-  assert.equal(code('{"app":"off-script","version":9,"states":[],"events":[]}'), 'newer');
+  assert.equal(code('{"app":"off-script-cast","version":9,"states":[],"events":[]}'), 'newer');
 });

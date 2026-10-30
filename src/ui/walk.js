@@ -4,13 +4,17 @@
 // the screen kept on, and two big buttons do the marking. Afterwards he checks the list, and the
 // results are saved at the moments they were heard.
 import { h, clear, screen, button, announce, focusHeading, plural, settled } from './dom.js';
-import { buildWalk, trialAt, partAt, reviewRows, walkResults, walkRecords } from '../tape.js';
+import { buildWalk, noteKey, trialAt, partAt, reviewRows, walkResults, walkRecords } from '../tape.js';
+import { sync } from '../cast/reminders.js';
 import { tapeBlob, createPlayer, keepScreenOn } from '../player.js';
 import { canSpeak, speak, stopSpeaking } from '../tts.js';
 import { tokenize, keyedCount, joinTokens } from '../tokens.js';
-import { duration } from '../plan.js';
+import { COACH } from '../coach.js';
 
-const LENGTHS = [15, 30, 45, 60, 90];
+const LENGTHS = [5, 10, 15, 20, 30];
+
+// A stage direction as it is read aloud, without its brackets.
+export const spokenNote = (n) => n.replace(/[[\]]/g, '');
 
 // For walks without an audio pack: the same shape as a pack, with each "clip" naming what to say
 // and lasting about as long as it takes to say it.
@@ -25,7 +29,10 @@ export function speechManifest(model) {
   for (const it of model.items) speakers[it.speaker] ||= clip(`speaker:${it.speaker}`, it.speaker);
   const headings = {};
   model.scenes.forEach((sc) => (headings[sc.index] = clip(`heading:${sc.index}`, sc.heading)));
-  return { version: 1, scriptHash: model.hash, silence: { file: 'silence', duration: 0.25 }, items, speakers, headings };
+  const coach = Object.fromEntries(Object.entries(COACH).map(([key, text]) => [key, clip(`coach:${key}`, text)]));
+  const notes = {};
+  for (const it of model.items) for (const n of it.cue.notes) notes[noteKey(n)] = clip(`note:${noteKey(n)}`, spokenNote(n));
+  return { version: 1, scriptHash: model.hash, silence: { file: 'silence', duration: 0.25 }, items, speakers, headings, coach, notes };
 }
 
 // What each clip in a manifest says, so any tape can also be read aloud.
@@ -39,6 +46,8 @@ export function clipTexts(manifest, model) {
   }
   for (const [name, ref] of Object.entries(manifest.speakers)) texts.set(ref.file, name);
   for (const [i, ref] of Object.entries(manifest.headings)) if (model.scenes[i]) texts.set(ref.file, model.scenes[i].heading);
+  for (const [key, ref] of Object.entries(manifest.coach || {})) texts.set(ref.file, COACH[key]);
+  for (const it of model.items) for (const n of it.cue.notes) if (manifest.notes && manifest.notes[noteKey(n)]) texts.set(manifest.notes[noteKey(n)].file, spokenNote(n));
   return texts;
 }
 
@@ -58,12 +67,16 @@ export function showWalk(ctx) {
     page(
       'Walk',
       [
-        h('p', { class: 'lead' }, 'Earbuds in, phone in your pocket.'),
-        h('p', { class: 'message' }, 'On paths and roads, keep one earbud out or use transparency mode.'),
-        pack
-          ? h('p', {}, 'Say each line in the gap before you hear it. Missed one? Double tap an earbud, or press next. Press back to hear it again.')
-          : h('p', {}, 'There is no audio pack yet, so the phone reads aloud with the screen on. Say each line in the gap, then tap Missed or Got it.'),
-        h('p', {}, 'A new line comes twice first: say it back in the gap after it. A few minutes later its beat runs from the cue.'),
+        h('p', { class: 'lead' }, 'Earbuds in, phone in your pocket. A voice will tell you what to do.'),
+        h('p', { class: 'message' }, 'Near roads, keep one earbud out so you can hear traffic.'),
+        h(
+          'ol',
+          { class: 'steps' },
+          h('li', {}, 'New line: just listen, then say it back when you are told.'),
+          h('li', {}, 'Your turn: you hear your cue. Say your line in the gap.'),
+          h('li', {}, 'Then you hear it, so you can check.'),
+          pack ? h('li', {}, 'Got it wrong, or not sure? Double tap an earbud. Press back to hear it again.') : h('li', {}, 'Got it wrong, or not sure? Tap Missed. Keep the screen on.'),
+        ),
         h('h2', {}, 'How long?'),
         h('div', { class: 'choice-grid' }, LENGTHS.map((m) => button(`${m} minutes`, settled(() => build(m)), { class: 'btn big' }))),
       ],
@@ -91,11 +104,11 @@ export function showWalk(ctx) {
     });
     if (!tape.trials.length) {
       return page('Nothing to walk yet', [h('p', { class: 'lead' }, 'There is nothing ready to practise on a walk right now.')], [
-        button('Back to Today', settled(() => ctx.go('today')), { class: 'btn primary' }),
+        button('Back to my lines', settled(() => ctx.go('today')), { class: 'btn primary' }),
       ]);
     }
-    const about = [h('p', {}, `This walk is about ${duration(tape.duration / 60)}.`)];
-    if (tape.duration < minutes * 60 - 120) about.push(h('p', { class: 'help' }, 'It is shorter than asked because it covers everything useful for now. Start another later in the walk.'));
+    const about = [];
+    if (tape.duration < minutes * 60 - 120) about.push(h('p', { class: 'help' }, 'This one is short, because it covers everything useful for now.'));
     if (tape.missing) about.push(h('p', { class: 'help' }, `${plural(tape.missing, 'line')} have no audio in the pack, so they are left out.`));
     if (ctx.manifest) audioWalk(tape, plan, about);
     else speechWalk(tape, plan, clipTexts(manifest, ctx.model), about);
@@ -127,8 +140,9 @@ export function showWalk(ctx) {
     const marked = new Set();
     const times = clock(tape);
     let started = null;
-    let label = partAt(tape.parts, 0);
-    const partEl = h('p', { class: 'lead' }, label);
+    const labelAt = (t) => partAt(tape.guide.length ? tape.guide : tape.parts, t);
+    let label = labelAt(0);
+    const partEl = h('p', { class: 'lead guide', role: 'status' }, label);
     const countEl = h('p', { role: 'status' }, 'Nothing marked yet.');
     const fill = h('div', { class: 'timebar-fill', style: { width: '0%' } });
     const bar = h('div', { class: 'timebar', role: 'img', 'aria-label': 'How far through the walk' }, fill);
@@ -153,7 +167,7 @@ export function showWalk(ctx) {
       onTime: (t) => {
         times.at(t);
         fill.style.width = `${Math.min(100, (100 * t) / tape.duration)}%`;
-        const now = partAt(tape.parts, t);
+        const now = labelAt(t);
         if (now !== label) {
           label = now;
           partEl.textContent = now;
@@ -166,7 +180,7 @@ export function showWalk(ctx) {
         speechWalk(tape, plan, clipTexts(ctx.manifest, ctx.model), [h('p', { class: 'message' }, 'The tape would not play, so the phone will read it aloud instead.')]);
       },
     });
-    player.load(blob, { title: partAt(tape.parts, 0), artist: 'Off Script' });
+    player.load(blob, { title: label, artist: 'Off Script' });
     ctx.walk = { tape, player }; // for browser tests
 
     const playBtn = button('Play', async () => {
@@ -180,7 +194,7 @@ export function showWalk(ctx) {
 
     page(
       'Walk',
-      [...about, partEl, bar, countEl, h('p', { class: 'help' }, 'Missed one? Double tap an earbud, or tap Missed that one. To hear a line again, press back on the earbuds.')],
+      [...about, partEl, bar, countEl, h('p', { class: 'help' }, 'Got it wrong, or not sure? Double tap an earbud, or tap Missed that one. To hear a line again, press back on the earbuds.')],
       [
         playBtn,
         h('div', { class: 'row' }, button('Missed that one', () => mark(player.time)), button('Hear it again', () => replay(player.time))),
@@ -212,7 +226,8 @@ export function showWalk(ctx) {
     let started = null;
     let skip = null; // ends the current gap early
     let release = () => {};
-    const partEl = h('p', { class: 'lead' }, partAt(tape.parts, 0));
+    const labelAt = (t) => partAt(tape.guide.length ? tape.guide : tape.parts, t);
+    const partEl = h('p', { class: 'lead guide', role: 'status' }, labelAt(0));
     const countEl = h('p', { role: 'status' }, 'Nothing marked yet.');
     const now = () => starts[Math.min(pos, starts.length - 1)] || 0;
 
@@ -228,7 +243,7 @@ export function showWalk(ctx) {
     async function run() {
       while (playing && pos < tape.steps.length) {
         const step = tape.steps[pos];
-        partEl.textContent = partAt(tape.parts, starts[pos]);
+        partEl.textContent = labelAt(starts[pos]);
         if (step.clip) await speak(texts.get(step.clip) || '', { voiceURI: ctx.settings.voiceURI, rate: ctx.settings.rate });
         else await wait(step.dur);
         skip = null;
@@ -251,8 +266,7 @@ export function showWalk(ctx) {
       playing = true;
       playBtn.textContent = 'Pause';
       if (started === null) started = Date.now();
-      speak('Walk starting.', { voiceURI: ctx.settings.voiceURI, rate: ctx.settings.rate });
-      release = await keepScreenOn();
+            release = await keepScreenOn();
       run();
     }, { class: 'btn primary big' });
 
@@ -310,7 +324,7 @@ export function showWalk(ctx) {
     let saving = false;
     if (!rows.length) {
       return page('Walk ended', [h('p', { class: 'lead' }, 'Nothing was heard all the way through, so there is nothing to save.')], [
-        button('Back to Today', settled(() => ctx.go('today')), { class: 'btn primary' }),
+        button('Back to my lines', settled(() => ctx.go('today')), { class: 'btn primary' }),
       ]);
     }
     const list = h(
@@ -334,7 +348,7 @@ export function showWalk(ctx) {
     );
     page(
       'How did it go?',
-      [h('p', { class: 'lead' }, `${plural(rows.length, 'line')} on this walk. Tick any you missed; the ones you marked are ticked already.`), list],
+      [h('p', { class: 'lead' }, `${plural(rows.length, 'line')} on this walk. Tick any you missed or were not sure about. Be honest: it only helps you.`), h('p', { class: 'help' }, 'Lines count towards your % once you have typed them in a round.'), list],
       [
         button('All good apart from the ticked ones', settled(async () => {
           if (saving) return; // saved once, however many taps
@@ -344,12 +358,13 @@ export function showWalk(ctx) {
           const records = walkRecords(results, { start, getState: ctx.getState, k: plan.k });
           for (const rec of records) await ctx.saveAnswer(rec);
           ctx.refit();
+          sync(ctx);
           const missed = rows.filter((r) => r.ticked).length;
           announce('Walk saved');
           page('Walk saved', [h('p', { class: 'lead' }, `${plural(rows.length, 'line')}, ${missed ? `${missed} to look at again` : 'all word perfect'}.`)], [
             button(`Another ${length} minutes`, settled(() => build(length)), { class: 'btn primary' }),
             button('A different length', settled(choose)),
-            button('Back to Today', settled(() => ctx.go('today'))),
+            button('Back to my lines', settled(() => ctx.go('today'))),
           ]);
         }), { class: 'btn primary' }),
         button('Don’t count this one', settled(() => !saving && ctx.go('today'))),

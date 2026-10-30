@@ -17,6 +17,8 @@ const refs = (m) => [
   ...Object.values(m.items).flatMap((x) => [x.line, x.cue].filter(Boolean)),
   ...Object.values(m.speakers),
   ...Object.values(m.headings),
+  ...Object.values(m.coach || {}),
+  ...Object.values(m.notes || {}),
 ];
 
 export function readAudioPack(bytes) {

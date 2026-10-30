@@ -7,8 +7,8 @@ export default defineConfig({
   timeout: 90000,
   expect: { timeout: 10000 },
   reporter: [['list']],
-  use: { baseURL: 'http://localhost:4173/off-script/' },
-  webServer: { command: 'node tools/serve.mjs 4173', url: 'http://localhost:4173/off-script/', reuseExistingServer: true },
+  use: { baseURL: 'http://localhost:4174/off-script-cast/' },
+  webServer: { command: 'node tools/serve.mjs 4174', url: 'http://localhost:4174/off-script-cast/', reuseExistingServer: true },
   projects: [
     { name: 'webkit', use: { ...devices['iPhone 15'] } },
     { name: 'chromium', use: { browserName: 'chromium', viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true } },

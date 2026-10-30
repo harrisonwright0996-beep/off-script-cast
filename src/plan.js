@@ -89,7 +89,7 @@ export const maxDays = (phase) => (phase === 'learning' || phase === 'show' ? 3 
 const targetOf = (openings, id) => (openings.has(id) ? OPENING_TARGET : TARGET);
 
 // The learned lines ready to test now, each with its chance of recall (0 for a miss not yet relearned).
-export function readyLines({ model, getState, now, today, k, phase }) {
+export function readyLines({ model, getState, now, today, k, phase, proofs = false }) {
   const openings = new Set(spineItemIds(model));
   const cap = maxDays(phase);
   const ready = new Map();
@@ -98,7 +98,7 @@ export function readyLines({ model, getState, now, today, k, phase }) {
     if (s.status !== 'review') continue;
     const r = s.lastResult === 'miss' ? 0 : recallNow(s, now, k) ?? 0;
     const stale = cap === 0 ? s.lastDay < today : daysBetween(s.lastDay, today) >= cap;
-    if (r <= targetOf(openings, it.id) || stale) ready.set(it.id, r);
+    if (r <= targetOf(openings, it.id) || stale || (proofs && !s.proved)) ready.set(it.id, r);
   }
   return ready;
 }
@@ -291,7 +291,7 @@ export function buildPlan({ model, index, getState, events, settings, today, now
   const notes = [];
 
   // Tests of what is already learned.
-  const ready = readyLines({ model, getState, now, today, k, phase });
+  const ready = readyLines({ model, getState, now, today, k, phase, proofs: settings.proofs });
   const tests = testsOf({ model, index, getState, ready, phase, today });
   const runs = tests.filter((t) => t.kind === 'run');
   const due = tests.filter((t) => t.kind === 'line').map((t) => t.id);

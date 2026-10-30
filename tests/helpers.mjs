@@ -10,6 +10,9 @@ import { dayKey } from '../src/dates.js';
 import { HOUR } from '../src/memory.js';
 import { DEFAULT_SETTINGS } from '../src/settings.js';
 
+// The engine's tests were written for these settings, whatever the app's defaults are.
+export const TEST_SETTINGS = { ...DEFAULT_SETTINGS, deadline: '2026-11-04', lastNewDay: '2026-11-01', proofs: false, mode: 'type', askSpeaker: true, sprintMinutes: 12, theme: 'cream' };
+
 export function fixtureModel() {
   const model = buildModel(parseScript(readDocxParagraphs(buildFixtureDocx())));
   return { model, index: indexModel(model) };
@@ -53,7 +56,7 @@ export function fakeApp({ settings = {}, today = '2026-10-26', hour = 12, step =
     get today() {
       return dayKey(new Date(app.clock));
     },
-    settings: { ...DEFAULT_SETTINGS, ...settings },
+    settings: { ...TEST_SETTINGS, ...settings },
     getState: (id) => states.get(id) || newState(id),
     plan: () => buildPlan({ model, index, getState: app.getState, events, settings: app.settings, today: app.today, now: app.clock }),
     save({ event, state }) {

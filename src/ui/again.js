@@ -10,7 +10,7 @@ export function showStartAgain(ctx, { scene = null } = {}) {
   const name = one ? 'Start this scene again' : 'Start again from 0%';
   const lead = one
     ? `Every line of ${one.heading} goes back to not started, and its answers so far are cleared. Every other scene keeps its progress.`
-    : 'Every line goes back to not started, and your answers so far are cleared. The script, the audio pack, your dates and your settings stay.';
+    : 'Every line goes back to not started, and your answers so far are cleared. Your lines, audio and settings stay.';
 
   async function startAgain() {
     await ctx.startAgain(one ? [...one.itemIds] : null);
@@ -22,7 +22,7 @@ export function showStartAgain(ctx, { scene = null } = {}) {
     screen({
       title: `${name}?`,
       back,
-      body: [h('p', { class: 'lead' }, lead), h('p', {}, 'Any sprint or practice part way is dropped. Back up your progress first if you might want it again.')],
+      body: [h('p', { class: 'lead' }, lead), h('p', {}, 'Back up your progress first if you might want it again.')],
       footer: [
         button(one ? 'Keep its progress' : 'Keep my progress', back, { class: 'btn primary' }),
         button('Back up first', () => saveBackup(ctx)),

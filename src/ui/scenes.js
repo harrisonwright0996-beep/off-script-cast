@@ -1,6 +1,6 @@
 // Scenes: the play scene by scene, and a reader for each: speech numbers, speakers in bold,
 // directions in square brackets (never italics), on screen text marked as such.
-import { h, screen, button, announce, num, plural } from './dom.js';
+import { h, screen, button, announce } from './dom.js';
 import { progressOf } from '../plan.js';
 import { bracketParens } from '../items.js';
 import { canSpeak, speak, stopSpeaking } from '../tts.js';
@@ -10,20 +10,21 @@ export function showScenes(ctx) {
   const focus = ctx.settings.focusScene;
   ctx.root.append(
     screen({
-      title: 'Scenes',
+      title: 'My lines',
       back: () => ctx.go('today'),
+      footer: ctx.model.items.some((it) => ctx.getState(it.id).status === 'new') ? [button('Already know some? Check them', () => ctx.go('checkin'))] : [],
       body: [
         h(
           'ul',
           { class: 'scene-list' },
-          progress.scenes.map((sc) =>
+          progress.scenes.filter((sc) => sc.words).map((sc) =>
             h(
               'li',
               {},
               button(
                 [
                   h('strong', {}, sc.heading),
-                  h('span', {}, sc.speeches ? `${sc.perfectSpeeches} of ${sc.speeches} speeches word perfect, ${plural(sc.words, 'word')}` : 'On screen text only'),
+                  h('span', {}, `${sc.perfectSpeeches} of ${sc.speeches} speeches word perfect`),
                   focus === sc.scene ? h('span', {}, 'Learning this scene next') : null,
                 ],
                 () => ctx.go('reader', { scene: sc.scene }),
@@ -106,7 +107,6 @@ export function showReader(ctx, { scene: index }) {
       title: scene.heading,
       back: () => ctx.go('scenes'),
       body: [
-        h('p', { class: 'help' }, scene.words ? `${plural(scene.reader.filter((r) => r.t === 'speech').length, 'speech', 'speeches')}, ${num(scene.words)} words.` : 'On screen text only.'),
         h('div', { class: 'reader' }, all.map((p) => p.el)),
         learned
           ? h(

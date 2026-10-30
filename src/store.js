@@ -1,7 +1,7 @@
 // Everything the app keeps, in IndexedDB on the phone. Nothing is ever sent anywhere.
 // Stores: kv (settings, script model, audio manifest, saved sprint), items (one state per item),
 // events (every answer, for the plan and for undo), audio (MP3 clips by file name).
-const DB = 'off-script';
+const DB = 'off-script-cast';
 const VERSION = 1;
 
 const req = (r) =>

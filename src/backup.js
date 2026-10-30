@@ -15,7 +15,7 @@ const slim = (prev) => prev && { status: prev.status, stability: prev.stability,
 
 export function makeBackup({ model, states, events, settings, now = Date.now() }) {
   return {
-    app: 'off-script',
+    app: 'off-script-cast',
     version: BACKUP_VERSION,
     made: now,
     scriptHash: model.hash,
@@ -33,7 +33,7 @@ export function readBackup(text, model) {
   } catch {
     throw new BackupError('not-json');
   }
-  if (!data || data.app !== 'off-script' || !Array.isArray(data.states) || !Array.isArray(data.events)) throw new BackupError('not-backup');
+  if (!data || data.app !== 'off-script-cast' || !Array.isArray(data.states) || !Array.isArray(data.events)) throw new BackupError('not-backup');
   if (data.version > BACKUP_VERSION) throw new BackupError('newer');
   const ids = new Set(model.items.map((it) => it.id));
   const states = data.states.filter((s) => s && ids.has(s.id));

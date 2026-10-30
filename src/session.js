@@ -31,12 +31,13 @@ import { SLOW, recallNow } from './memory.js';
 import { cueOf, fnv1a, speakerChoices } from './items.js';
 import { beatStage, testsOf, typedPerWord } from './plan.js';
 import { dayKey } from './dates.js';
+import { earnsProof, needsProof, spotCheck } from './cast/proof.js';
 
 export const TEACH_FIRST_MESSAGE = "This stretch is new to you, so I'll teach it first.";
-export const AHEAD_MESSAGE = "Today's plan is done. This is a head start on tomorrow.";
-export const EXTRA_RUN_MESSAGE = "Today's plan is done. This is an extra run.";
-export const AGAIN_MESSAGE = 'Lines come back later in the sprint until they are right without help.';
-export const CLOSING_MESSAGE = "Time's up. Just the lines still to finish, then you're done.";
+export const AHEAD_MESSAGE = 'Nice. These are extra new lines.';
+export const EXTRA_RUN_MESSAGE = 'Nice. This is an extra run.';
+export const AGAIN_MESSAGE = 'Lines come back later in the round until they are right without help.';
+export const CLOSING_MESSAGE = "Nearly there. Just the lines still to finish, then you're done.";
 export const LETTERS_MESSAGE = 'As a line gets stronger, it shows fewer first letters. Say every word, the blanks too.';
 export const SHUFFLE_MESSAGE = 'Each new line comes back on its own and out of order, until it is right from its cue twice.';
 export const LADDER_MESSAGE = 'A new line stays with you for a few goes, with less help each time.';
@@ -385,6 +386,11 @@ export function createSession({ model, index, getPlan, getState, settings, scope
       const choices = settings.askSpeaker && item.askSpeaker ? speakerChoices(model, item, 6, byId) : [];
       c.askSpeaker = choices.length > 1;
       c.choices = c.askSpeaker ? choices : [];
+      // Saying a line is on trust: the go that would count it as learned is typed, and so is a spot
+      // check now and then. (Not on the ladder: it is the first time from the cue.)
+      const s = getState(item.id);
+      c.mustType = !t.ladder && needsProof(s);
+      c.spot = !t.ladder && spotCheck(s, S.goes, item.id);
     }
     if (t.queue === 'beat' && t.kind === 'item' && !S.shuffleSaid) {
       S.message ||= SHUFFLE_MESSAGE;
@@ -469,7 +475,9 @@ export function createSession({ model, index, getPlan, getState, settings, scope
       const perWord = typedPerWord(result, item);
       const slow = result.pass && !help && !primed && !relearn && !result.slip && typing != null && perWord != null && perWord > SLOW * typing;
       const state =
-        help && result.pass ? applyHelp(prev, { day }) : applyResult(prev, { pass: result.pass, day, time, mode: result.mode, k, pretest, relearn, primed, slow });
+        help && result.pass
+          ? applyHelp(prev, { day })
+          : applyResult(prev, { pass: result.pass, day, time, mode: result.mode, k, pretest, relearn, primed, slow, proof: earnsProof({ pass: result.pass, mode: result.mode, help, ladder: !!t.ladder }) });
       const event = { time, day, id, pass: result.pass, mode: result.mode, queue, misses: result.misses.length, speakerWrong: !!result.speakerWrong, relearn, prev };
       if (help) event.help = true;
       if (primed) event.primed = true;

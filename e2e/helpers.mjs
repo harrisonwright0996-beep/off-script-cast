@@ -1,8 +1,12 @@
 // Shared steps for the browser tests. Only the invented play is ever loaded.
 import { test as base, expect } from '@playwright/test';
-import { buildFixtureDocx } from '../tests/fixtures/night-ferry.mjs';
 import { fixtureModel } from '../tests/helpers.mjs';
-import { buildFixturePack } from '../tests/fixtures/audio-pack.mjs';
+import { buildFixturePack, silentMp3 } from '../tests/fixtures/audio-pack.mjs';
+import { readAudioPack } from '../src/audiopack.js';
+import { COACH } from '../src/coach.js';
+import { noteKey } from '../src/tape.js';
+import { castList, memberPack } from '../src/cast/build.js';
+import { deriveKeys, seal } from '../src/cast/pack.js';
 
 export { expect };
 
@@ -29,42 +33,106 @@ export const test = base.extend({
   },
 });
 
-export const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+export const CODE = 'otter lamp river nine';
+export const WORKER = 'https://off-script-cast.example.workers.dev';
 
-// Opens the app; in the iPhone browser it first asks to be installed, which tests skip.
+// Everything the worker would hold for the invented play: sealed, as the real ones are.
+let sealed = null;
+async function workerFiles() {
+  if (sealed) return sealed;
+  const { model } = fixtureModel();
+  const audio = readAudioPack(buildFixturePack(model));
+  const coach = {};
+  for (const key of Object.keys(COACH)) {
+    audio.clips.set(`k-${key}.mp3`, silentMp3(20));
+    coach[key] = { file: `k-${key}.mp3`, duration: (20 * 576) / 22050 };
+  }
+  const notes = {};
+  for (const n of new Set(model.items.flatMap((it) => it.cue.notes))) {
+    audio.clips.set(`n-${noteKey(n)}.mp3`, silentMp3(30));
+    notes[noteKey(n)] = { file: `n-${noteKey(n)}.mp3`, duration: (30 * 576) / 22050 };
+  }
+  const keys = await deriveKeys(CODE);
+  const speaker = model.items[1].speaker;
+  const members = [
+    { name: 'Whole Company', ids: model.items.map((it) => it.id) },
+    { name: speaker, ids: model.items.filter((it) => it.speaker === speaker).map((it) => it.id) },
+  ];
+  const files = {};
+  const list = [];
+  for (const [i, m] of members.entries()) {
+    const { sub, zip } = memberPack(model, { name: m.name, ids: m.ids }, audio, { coach, notes });
+    files[`p${i}`] = await seal(keys.key, zip);
+    list.push({ name: m.name, file: `p${i}`, lines: sub.items.length });
+  }
+  files.cast = await seal(keys.key, castList(list, 'v1'));
+  sealed = { files, keys, list, speaker };
+  return sealed;
+}
+
+// A stand in for the worker, inside the page. Playwright's WebKit cannot intercept a request from a
+// page with a service worker, and these tests want the service worker running as on a real phone.
+const faked = new WeakMap();
+export async function fakeWorker(page, { calls = [] } = {}) {
+  if (faked.has(page)) {
+    faked.get(page).calls = calls;
+    return;
+  }
+  const seen = { calls };
+  faked.set(page, seen);
+  const { files, keys } = await workerFiles();
+  await page.exposeFunction('castWorker', (path, token) => {
+    seen.calls.push(path);
+    if (token !== keys.token) return { status: 401 };
+    const file = files[path.replace('/f/', '')];
+    return file ? { status: 200, bytes: Buffer.from(file).toString('base64') } : { status: 404 };
+  });
+  await page.addInitScript((WORKER) => {
+    const real = window.fetch;
+    window.fetch = async (url, options = {}) => {
+      if (!String(url).startsWith(WORKER)) return real(url, options);
+      if (!navigator.onLine) throw new TypeError('Load failed');
+      const { status, bytes } = await window.castWorker(String(url).slice(WORKER.length), options.headers['x-cast-token']);
+      return new Response(bytes ? Uint8Array.from(atob(bytes), (c) => c.charCodeAt(0)) : null, { status });
+    };
+  }, WORKER);
+}
+
+// Opens the app; a phone first asks to be installed, which tests skip.
 export async function open(page, url = './') {
+  await fakeWorker(page);
   await page.goto(url);
-  const carryOn = page.getByRole('button', { name: 'Continue in Safari for now' });
-  const welcome = page.getByRole('heading', { name: 'Off Script', exact: true });
-  const today = page.getByRole('heading', { name: 'Today', exact: true });
+  const carryOn = page.getByRole('button', { name: 'Carry on without installing' });
+  const welcome = page.getByRole('heading', { name: 'Welcome to Off Script' });
+  const today = page.getByRole('heading', { name: 'Your lines', exact: true });
   await expect(carryOn.or(welcome).or(today)).toBeVisible();
   if (await carryOn.isVisible()) await carryOn.click();
 }
+
+// Unlocks, picks a member and starts from the beginning, as a pupil would.
+export async function enrol(page, name = 'Whole Company', url = './') {
+  await open(page, url);
+  await page.getByLabel('Company code').fill(CODE);
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  await page.getByRole('button', { name, exact: true }).click();
+  await page.getByRole('button', { name: `Yes, I am ${name}` }).click();
+  await expect(page.getByRole('heading', { name: 'Already know some?' })).toBeVisible({ timeout: 30000 });
+}
+
+// For the tests of the engine: the whole play on the settings they were written for.
+export async function importScript(page, url) {
+  await enrol(page, 'Whole Company', url);
+  await page.evaluate(() => window.offScript.saveSettings({ deadline: '2026-11-04', lastNewDay: '2026-11-01', proofs: false, mode: 'type', askSpeaker: true, sprintMinutes: 12, theme: 'cream' }));
+  await page.getByRole('button', { name: 'No, start from the beginning' }).click();
+  await expect(page.getByRole('heading', { name: 'Your lines' })).toBeVisible();
+}
+
+export const importPack = async () => {}; // the pack comes with the unlock
 
 export async function chooseFile(page, buttonName, file) {
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: buttonName, exact: true }).click();
   await (await chooser).setFiles(file);
-}
-
-export async function importScript(page, url) {
-  await open(page, url);
-  await chooseFile(page, 'Choose the script', { name: 'Night Ferry.docx', mimeType: DOCX, buffer: Buffer.from(buildFixtureDocx()) });
-  await expect(page.getByRole('heading', { name: 'Is this the script?' })).toBeVisible();
-  await expect(page.getByText('4 scenes, 22 speeches, 143 words to learn.')).toBeVisible();
-  await page.getByRole('button', { name: 'Yes, use this script' }).click();
-  await expect(page.getByRole('heading', { name: 'Your dates' })).toBeVisible();
-  await page.getByRole('button', { name: 'Looks right' }).click();
-  await expect(page.getByRole('heading', { name: 'Today' })).toBeVisible();
-}
-
-// From Today: imports the invented play's audio pack in Settings, then back to Today.
-export async function importPack(page) {
-  await page.getByRole('button', { name: 'Settings' }).click();
-  const zip = Buffer.from(buildFixturePack(fixtureModel().model));
-  await chooseFile(page, 'Import audio pack', { name: 'Off Script audio pack 26 October.zip', mimeType: 'application/zip', buffer: zip });
-  await expect(page.getByText('Audio pack: every line has audio', { exact: false })).toBeVisible();
-  await page.getByRole('button', { name: 'Back', exact: true }).click();
 }
 
 // The keys for the line on show: one first letter or digit per word.

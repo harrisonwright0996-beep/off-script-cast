@@ -26,6 +26,7 @@ export function newState(id) {
     lastDay: null,
     lastTime: 0,
     lastMode: null,
+    proved: false, // typed right from its cue alone (cast/proof.js)
   };
 }
 
@@ -36,8 +37,9 @@ const addDay = (days, day) => (days.includes(day) ? days : [...days, day]);
 // relearn: a go after missing the line earlier in the same sprint, which says little about memory, so
 // it does not grow it. primed: from the cue alone just after a go with the first letters, and slow:
 // typed right but much slower than usual; either grows memory by half as much.
-export function applyResult(state, { pass, day, time, mode, k = 1, pretest = false, relearn = false, primed = false, slow = false }) {
+export function applyResult(state, { pass, day, time, mode, k = 1, pretest = false, relearn = false, primed = false, slow = false, proof = false }) {
   const s = { ...state };
+  if (proof) s.proved = true;
   if (s.status === 'new') {
     s.status = 'learning';
     s.firstDay = day;
@@ -70,6 +72,12 @@ export function applyResult(state, { pass, day, time, mode, k = 1, pretest = fal
   s.lastTime = time;
   s.lastMode = mode;
   return s;
+}
+
+// Typed right from the cue in Already know some?: learned and proved, before being taught. It comes
+// back as a normal check, at the first stability for a line known before teaching.
+export function applyKnown(state, { day, time }) {
+  return { ...state, status: 'review', firstDay: day, learnedDay: day, passes: CRITERION, passDays: [day], stability: FIRST.known, proved: true, lastResult: 'pass', lastDay: day, lastTime: time, lastMode: 'type' };
 }
 
 // A go with the first letters right: it says little about memory, so it changes nothing but marks a

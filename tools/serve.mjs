@@ -1,5 +1,5 @@
 // A small static server for trying Off Script on the laptop and for the browser tests. It serves the
-// repository at /off-script/, the same path as GitHub Pages. Usage: node tools/serve.mjs [port]
+// repository at /off-script-cast/, the same path as GitHub Pages. Usage: node tools/serve.mjs [port]
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const port = Number(process.argv[2] || 4173);
-const BASE = '/off-script/';
+const BASE = '/off-script-cast/';
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',

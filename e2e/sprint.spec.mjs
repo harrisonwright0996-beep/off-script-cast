@@ -7,7 +7,7 @@ const shot = (page, name) => page.screenshot({ path: `shots/${test.info().projec
 
 test('a sprint by keypad: a new line stays with him up the ladder, with less help each time, then comes back on its own and out of order, with the first letters, then without: who speaks, type, word perfect', async ({ page }) => {
   await importScript(page);
-  await page.getByRole('button', { name: 'Start sprint' }).click();
+  await page.getByRole('button', { name: 'Start learning' }).click();
   await expect(page.getByRole('heading', { name: 'New', exact: true })).toBeVisible();
   await expect(page.getByText('Start of Prologue')).toBeVisible();
   await shot(page, 'card-test');
@@ -98,7 +98,7 @@ test('a sprint by keypad: a new line stays with him up the ladder, with less hel
 
 test('a miss shows the right word and comes back through first letters; undo puts it back', async ({ page }) => {
   await importScript(page);
-  await page.getByRole('button', { name: 'Start sprint' }).click();
+  await page.getByRole('button', { name: 'Start learning' }).click();
   await page.getByRole('button', { name: 'Try it' }).click();
   await page.getByRole('group', { name: 'Who speaks next?' }).getByRole('button', { name: 'Keeper', exact: true }).click();
   await expect(page.getByText('It was Cast', { exact: false }).or(page.locator('.chip.right'))).toBeVisible();
@@ -134,7 +134,7 @@ test('a miss shows the right word and comes back through first letters; undo put
 
 test('Say mode: reveal, tap the words missed, done', async ({ page }) => {
   await importScript(page);
-  await page.getByRole('button', { name: 'Start sprint' }).click();
+  await page.getByRole('button', { name: 'Start learning' }).click();
   await page.getByRole('button', { name: 'Try it' }).click();
   await page.getByRole('button', { name: 'Say it instead' }).click();
   await page.getByRole('group', { name: 'Who speaks next?' }).getByRole('button', { name: 'Cast', exact: true }).click();
@@ -148,13 +148,13 @@ test('Say mode: reveal, tap the words missed, done', async ({ page }) => {
 
 test('progress survives a reload, and the sprint carries on where it was', async ({ page }) => {
   await importScript(page);
-  await page.getByRole('button', { name: 'Start sprint' }).click();
+  await page.getByRole('button', { name: 'Start learning' }).click();
   for (let i = 0; i < 5; i++) await answerCard(page);
   const before = await page.evaluate(() => ({ card: window.offScript.card.item.id, states: window.offScript.states.size }));
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Today', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
   expect(await page.evaluate(() => window.offScript.states.size)).toBe(before.states);
-  await page.getByRole('button', { name: 'Start sprint' }).click();
+  await page.getByRole('button', { name: 'Start learning' }).click();
   await page.waitForFunction(() => window.offScript.card);
   expect(await page.evaluate(() => window.offScript.card.item.id)).toBe(before.card);
 });
@@ -164,16 +164,16 @@ test('progress survives a reload, and the sprint carries on where it was', async
 test('works offline once installed, with the server gone', async ({ page }) => {
   const server = spawn(process.execPath, ['tools/serve.mjs', '4199'], { stdio: 'ignore' });
   try {
-    await expect.poll(async () => fetch('http://localhost:4199/off-script/').then((r) => r.status).catch(() => 0)).toBe(200);
-    await importScript(page, 'http://localhost:4199/off-script/');
+    await expect.poll(async () => fetch('http://localhost:4199/off-script-cast/').then((r) => r.status).catch(() => 0)).toBe(200);
+    await importScript(page, 'http://localhost:4199/off-script-cast/');
     await page.evaluate(() => navigator.serviceWorker.ready);
     await page.reload();
-    await expect(page.getByRole('heading', { name: 'Today', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
     server.kill();
-    await expect.poll(async () => fetch('http://localhost:4199/off-script/').then(() => 'up').catch(() => 'down')).toBe('down');
+    await expect.poll(async () => fetch('http://localhost:4199/off-script-cast/').then(() => 'up').catch(() => 'down')).toBe('down');
     await page.reload();
-    await expect(page.getByRole('heading', { name: 'Today', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Start sprint' }).click();
+    await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Start learning' }).click();
     await expect(page.getByRole('button', { name: 'Try it' })).toBeVisible();
   } finally {
     server.kill();
@@ -183,23 +183,24 @@ test('works offline once installed, with the server gone', async ({ page }) => {
 test('time up: the lines still to finish come first, then Sprint done and a break; Just 2 minutes ends with Keep going?', async ({ page }) => {
   await importScript(page);
   await page.evaluate(() => (window.offScript.settings.sprintMinutes = 0.02)); // a one second sprint
-  await page.getByRole('button', { name: 'Start sprint' }).click();
+  await page.getByRole('button', { name: 'Start learning' }).click();
   await page.waitForTimeout(1300);
   await answerCard(page); // Teach me
   await answerCard(page); // Read
   await answerCard(page); // Some words taken out: time is up, so nothing new, but the climb goes on
   await expect(page.getByRole('heading', { name: 'New', exact: true })).toBeVisible();
-  await expect(page.getByText("Time's up. Just the lines still to finish, then you're done.")).toBeVisible();
+  await expect(page.getByText("Nearly there. Just the lines still to finish, then you're done.")).toBeVisible();
   await expect(page.getByText('Say it aloud from the first letters, then reveal it.')).toBeVisible();
   await shot(page, 'card-closing');
   await answerCard(page); // the first letters
   await answerCard(page); // fewer of them
   await answerCard(page); // From the cue alone: nothing is left to finish, so the sprint ends here
-  await expect(page.getByRole('heading', { name: 'Sprint done' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Round done' })).toBeVisible();
   await expect(page.getByText('1 answer, 1 word perfect.')).toBeVisible();
-  await expect(page.getByText('Stand up, drink some water', { exact: false })).toBeVisible();
+  await expect(page.getByText('Stand up, drink some water', { exact: false })).toHaveCount(0); // no break to take: a science note instead
+  await expect(page.locator('.science')).toBeVisible();
   await shot(page, 'sprint-done');
-  await page.getByRole('button', { name: 'Stop for now' }).click();
+  await page.getByRole('button', { name: 'Back to my lines' }).click();
   await page.evaluate(() => window.offScript.go('sprint', { minutes: 0.02 }));
   await page.waitForTimeout(1300);
   await answerCard(page); // the line still being learned, with the first letters
@@ -209,23 +210,23 @@ test('time up: the lines still to finish come first, then Sprint done and a brea
 
 test("when today's plan is done: a head start on tomorrow, said plainly", async ({ page }) => {
   await importScript(page);
-  await page.getByRole('button', { name: 'Start sprint' }).click();
+  await page.getByRole('button', { name: 'Start learning' }).click();
   for (let i = 0; i < 60; i++) {
-    if ((await page.locator('h1').textContent()) === "Today's plan is done") break;
+    if ((await page.locator('h1').textContent()) === 'All caught up') break;
     await answerCard(page);
   }
-  await expect(page.getByRole('heading', { name: "Today's plan is done" })).toBeVisible();
-  await expect(page.getByText('The next check is ready in about', { exact: false })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'All caught up' })).toBeVisible();
+  await expect(page.getByText('The next check is ready in about', { exact: false })).toHaveCount(0); // no times
   await shot(page, 'plan-done');
-  await page.getByRole('button', { name: 'Head start on tomorrow' }).click();
-  await expect(page.getByText("Today's plan is done. This is a head start on tomorrow.")).toBeVisible();
+  await page.getByRole('button', { name: 'Learn more now' }).click();
+  await expect(page.getByText('Nice. These are extra new lines.')).toBeVisible();
   await page.getByRole('button', { name: 'Stop' }).click();
-  await expect(page.getByRole('heading', { name: 'Today', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
 });
 
 test('the keypad by touch: each tap types once, even the same key twice in a row', async ({ page }) => {
   await importScript(page);
-  await page.getByRole('button', { name: 'Start sprint' }).click();
+  await page.getByRole('button', { name: 'Start learning' }).click();
   await page.getByRole('button', { name: 'Try it' }).click();
   await page.getByRole('group', { name: 'Who speaks next?' }).getByRole('button', { name: 'Cast', exact: true }).click();
   const keys = await keysOf(page);
@@ -248,7 +249,7 @@ test('on a short screen, a long cue and line: the line being typed stays above t
     const lines = [{ speaker: items[4].speaker, text: items[4].cue.text }, ...lead.map((x) => ({ speaker: x.speaker, text: x.text }))];
     window.offScript.index.cues.set(items[0].id, { ...items[0].cue, lead: lead.map((x) => x.id), lines, nth: 2 });
   });
-  await page.getByRole('button', { name: 'Start sprint' }).click();
+  await page.getByRole('button', { name: 'Start learning' }).click();
   await page.getByRole('button', { name: 'Try it' }).click();
   await page.getByRole('group', { name: 'Who speaks next?' }).getByRole('button', { name: 'Cast', exact: true }).click();
   const keys = await keysOf(page);
@@ -265,7 +266,7 @@ test('on a short screen, a long cue and line: the line being typed stays above t
 
 test('a slip of the finger: a wrong key touching the right one can be counted right, and undone', async ({ page }) => {
   await importScript(page);
-  await page.getByRole('button', { name: 'Start sprint' }).click();
+  await page.getByRole('button', { name: 'Start learning' }).click();
   await page.getByRole('button', { name: 'Try it' }).click();
   await page.getByRole('group', { name: 'Who speaks next?' }).getByRole('button', { name: 'Cast', exact: true }).click();
   const keys = await keysOf(page);
@@ -338,8 +339,7 @@ test('after off script day: Today says so, and a sprint takes a miss first, then
     o.go('today');
     return ids;
   });
-  await expect(page.getByText('Checks now take the lines just falling due first, so the fewest slip; any that have slipped further come round as time allows.')).toBeVisible();
-  await page.getByRole('button', { name: 'Start sprint' }).click();
+  await page.getByRole('button', { name: 'Start learning' }).click();
   await page.waitForFunction(() => window.offScript.card);
   const goes = [];
   for (const id of [missed, justDue, slipped]) {

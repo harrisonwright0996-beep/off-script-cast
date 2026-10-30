@@ -12,15 +12,15 @@ async function carryOn(page) {
 
 test('choose what to practise: a scene, every line, read it first; stopped part way, it carries on', async ({ page }) => {
   await importScript(page);
-  await page.getByRole('button', { name: 'Choose what to practise' }).click();
-  await expect(page.getByRole('heading', { name: 'Choose what to practise' })).toBeVisible();
+  await page.getByRole('button', { name: 'Choose' }).click();
+  await expect(page.getByRole('heading', { name: 'Choose' })).toBeVisible();
   await expect(page.getByText('No lines match these choices. Try Every line.')).toBeVisible(); // nothing started yet
   await expect(page.getByRole('button', { name: 'Start' })).toBeDisabled();
   await page.getByLabel('Where').selectOption({ label: 'Scene 1: The Harbour' });
   await page.getByLabel('Which lines').selectOption({ label: 'Every line' });
   await page.getByLabel('How much help').selectOption({ label: 'Read it first' });
   await expect(page.getByText('Read each line, say it from the first letters, then later without.')).toBeVisible();
-  await expect(page.getByText(/^13 lines, \d+ words: about \d+ minutes at a typical pace\.$/)).toBeVisible();
+  await expect(page.getByText('13 lines.', { exact: true })).toBeVisible();
   await shot(page, 'choose');
   await page.getByRole('button', { name: 'Start' }).click();
   await expect(page.getByRole('heading', { name: 'Run: Scene 1: The Harbour' })).toBeVisible();
@@ -30,9 +30,9 @@ test('choose what to practise: a scene, every line, read it first; stopped part 
   expect(await answerCard(page)).toBe('help'); // then the first letters
   const at = await cardId(page);
   await page.getByRole('button', { name: 'Stop' }).click();
-  await expect(page.getByRole('heading', { name: 'Today', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Choose what to practise' }).click();
+  await page.getByRole('button', { name: 'Choose' }).click();
   await expect(page.getByText('Part way through: Scene 1: The Harbour, every line. 13 lines still to go.')).toBeVisible();
   await expect(page.getByLabel('Where')).toHaveValue('1'); // his last choices are remembered
   await expect(page.getByLabel('How much help')).toHaveValue('read');
@@ -41,7 +41,7 @@ test('choose what to practise: a scene, every line, read it first; stopped part 
 
   // The day's sprint is its own: the line that practice started has its go first, as any line under way does.
   await page.getByRole('button', { name: 'Stop' }).click();
-  await page.getByRole('button', { name: 'Start sprint' }).click();
+  await page.getByRole('button', { name: 'Start learning' }).click();
   await expect(page.getByRole('heading', { name: 'Learning', exact: true })).toBeVisible();
 });
 
@@ -49,13 +49,13 @@ test('a chosen practice at time up: Sprint done says what is left, and Carry on 
   await importScript(page);
   await page.evaluate(() => (window.offScript.settings.sprintMinutes = 0.02)); // a one second sprint
   const ids = await page.evaluate(() => window.offScript.model.items.map((it) => it.id));
-  await page.getByRole('button', { name: 'Choose what to practise' }).click();
+  await page.getByRole('button', { name: 'Choose' }).click();
   await page.getByLabel('Which lines').selectOption({ label: 'Every line' });
   await page.getByLabel('How much help').selectOption({ label: 'No help' });
   await page.getByRole('button', { name: 'Start' }).click();
   await page.waitForTimeout(1300);
   expect(await answerCard(page)).toBe('floor'); // from the cue alone; time is up after it
-  await expect(page.getByRole('heading', { name: 'Sprint done' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Round done' })).toBeVisible();
   await expect(page.getByText(`${ids.length - 1} lines of this practice still to go.`)).toBeVisible();
   await carryOn(page);
   expect(await cardId(page)).toBe(ids[1]);
@@ -63,7 +63,7 @@ test('a chosen practice at time up: Sprint done says what is left, and Carry on 
 
 test('a chosen practice to the end: Practice done, then Choose again with nothing left over', async ({ page }) => {
   await importScript(page);
-  await page.getByRole('button', { name: 'Choose what to practise' }).click();
+  await page.getByRole('button', { name: 'Choose' }).click();
   await page.getByLabel('Where').selectOption({ label: 'Prologue' });
   await page.getByLabel('Which lines').selectOption({ label: 'Every line' });
   await page.getByLabel('How much help').selectOption({ label: 'No help' });
@@ -74,7 +74,7 @@ test('a chosen practice to the end: Practice done, then Choose again with nothin
   await expect(page.getByText('4 answers, 4 word perfect.')).toBeVisible();
   await shot(page, 'practice-done');
   await page.getByRole('button', { name: 'Choose again' }).click();
-  await expect(page.getByRole('heading', { name: 'Choose what to practise' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Choose' })).toBeVisible();
   await expect(page.getByText('Part way through', { exact: false })).toHaveCount(0);
 });
 
@@ -91,7 +91,7 @@ async function learnedToday(page) {
     o.go('today');
     return ids;
   });
-  await expect(page.getByRole('button', { name: 'Just 2 minutes' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Quick round' })).toBeVisible();
   return ids;
 }
 
@@ -105,7 +105,7 @@ test('Run through: everything learned so far in script order; a miss carries on 
   await expect(page.getByLabel('Which lines').locator('option')).toHaveText(['Everything learned so far', 'Every line']);
   await expect(page.getByLabel('How much help')).toHaveValue('cue'); // from the cue first, help after a miss
   await page.getByLabel('How much help').selectOption({ label: 'No help' });
-  await expect(page.getByText(/^7 lines, \d+ words: under 5 minutes at a typical pace\.$/)).toBeVisible();
+  await expect(page.getByText('7 lines.', { exact: true })).toBeVisible();
   await shot(page, 'run-through');
   await page.getByRole('button', { name: 'Start' }).click();
   await expect(page.getByRole('heading', { name: 'Run: Prologue' })).toBeVisible();
@@ -117,14 +117,14 @@ test('Run through: everything learned so far in script order; a miss carries on 
   }
   expect(shown).toEqual([...learned, learned[1]]); // in order, then the miss once the Scene 1 run is done
   await expect(page.getByRole('heading', { name: 'Run through done' })).toBeVisible();
-  await expect(page.getByText('The whole play, everything learned so far.')).toBeVisible();
+  await expect(page.getByText('All my lines, everything learned so far.')).toBeVisible();
   await expect(page.getByText('8 answers, 7 word perfect.')).toBeVisible();
   await page.getByRole('button', { name: 'Run through again' }).click();
   await expect(page.getByRole('heading', { name: 'Run through' })).toBeVisible();
   await expect(page.getByLabel('How much help')).toHaveValue('none'); // remembered for Run through
   await expect(page.getByText('Part way through', { exact: false })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Today', exact: true }).click();
-  await page.getByRole('button', { name: 'Choose what to practise' }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await page.getByRole('button', { name: 'Choose' }).click();
   await expect(page.getByLabel('How much help')).toHaveValue('auto'); // Choose what to practise keeps its own
   await expect(page.getByLabel('Which lines').locator('option')).toHaveCount(3);
 });

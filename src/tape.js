@@ -14,6 +14,13 @@
 import { applyResult, needsTeaching } from './state.js';
 import { beatStage, extraRunsOf, phaseOf, readyLines, testsOf, REVIEW_BURST } from './plan.js';
 import { dayKey } from './dates.js';
+import { fnv1a } from './items.js';
+import { STEPS } from './coach.js';
+
+// The key of a stage direction's clip in a pack.
+export const noteKey = (note) => fnv1a(note);
+// How many times in a tape the coach gives the full words before it keeps to the short ones.
+export const COACH_FULL = 3;
 
 export const GAP_FACTOR = { shorter: 0.75, normal: 1, longer: 1.4 };
 
@@ -29,6 +36,7 @@ export function buildWalk({ model, index, manifest, getState, settings, plan, st
   const steps = [];
   const trials = [];
   const parts = [];
+  const guide = []; // what to do now, for the screen and the lock screen: { label, start }
   const unit = manifest.silence.duration;
   let t = 0;
   let missing = 0;
@@ -70,6 +78,30 @@ export function buildWalk({ model, index, manifest, getState, settings, plan, st
     }
     clip(it.cue.speaker === null ? manifest.headings[it.scene] : audio(it.id).cue);
   };
+  // The coach: a clip if the pack has one (a tape works without), and the same words on screen.
+  const says = (key) => {
+    const ref = manifest.coach && manifest.coach[key];
+    if (ref) clip(ref);
+  };
+  const told = {};
+  const step = (key) => guide.push({ label: STEPS[key], start: t });
+  // The full words for the first few times in a tape, then the short ones (or none).
+  const prompt = (key, short = null) => {
+    told[key] = (told[key] || 0) + 1;
+    step(key);
+    if (told[key] <= COACH_FULL) says(key);
+    else if (short) says(short);
+  };
+  // The script's own direction, where the line has one.
+  const directions = (it) => {
+    for (const note of it.cue.notes || []) {
+      const ref = manifest.notes && manifest.notes[noteKey(note)];
+      if (!ref) continue;
+      step('stage');
+      says('stage');
+      clip(ref);
+    }
+  };
   const answer = (it) => {
     const name = manifest.speakers[it.speaker];
     if (name && it.askSpeaker) clip(name);
@@ -77,7 +109,9 @@ export function buildWalk({ model, index, manifest, getState, settings, plan, st
   };
   const recall = (it, queue, replayFrom) => {
     const begin = t;
+    prompt('turn', 'turnShort');
     silence(gapSeconds(it.words, gap));
+    prompt('here');
     answer(it);
     trials.push({ id: it.id, queue, start: begin, answerEnd: t, end: t + 2, replayFrom });
     const time = start + t * 1000;
@@ -92,7 +126,7 @@ export function buildWalk({ model, index, manifest, getState, settings, plan, st
   const heading = (scene) => model.scenes[scene].heading;
 
   // A run of lines in script order: a cue only where the tape enters the scene.
-  const sequence = (ids, queue, cueEvery, whole = false) => {
+  const sequence = (ids, queue, cueEvery, whole = false, staged = false) => {
     let prev = null;
     for (const id of ids) {
       if (full() && !whole) return;
@@ -103,6 +137,7 @@ export function buildWalk({ model, index, manifest, getState, settings, plan, st
       }
       const from = t;
       if (cueEvery || !prev || prev.index !== it.index - 1 || prev.scene !== it.scene) cue(it);
+      if (staged) directions(it);
       recall(it, queue, from);
       prev = it;
     }
@@ -136,26 +171,38 @@ export function buildWalk({ model, index, manifest, getState, settings, plan, st
   const learnBeat = (beat) => {
     const ids = beat.itemIds.filter(usable);
     if (!ids.length) return true;
-    const mark = { steps: steps.length, trials: trials.length, parts: parts.length, heard: heard.length, t, lastLabel, sim: new Map(sim) };
+    const mark = { steps: steps.length, trials: trials.length, parts: parts.length, guide: guide.length, heard: heard.length, t, lastLabel, told: { ...told }, sim: new Map(sim) };
     part(`New: ${heading(beat.scene)}`);
     let prev = null;
     for (const id of ids.filter((x) => needsTeaching(stateOf(x)))) {
       const it = byId.get(id);
+      step('listen');
+      says('listen');
       if (!prev || prev.index !== it.index - 1 || prev.scene !== it.scene) cue(it, false);
+      directions(it);
       heard.push({ id, at: t });
-      for (let n = 0; n < 2; n++) {
-        answer(it);
-        silence(gapSeconds(it.words, gap));
-      }
+      answer(it);
+      step('sayBack');
+      says('sayBack');
+      silence(gapSeconds(it.words, gap));
+      step('again');
+      says('again');
+      answer(it);
+      step('sayBack');
+      says('sayBack');
+      silence(gapSeconds(it.words, gap));
       prev = it;
     }
     const from = t;
-    sequence(ids, 'beat', false, true);
+    says('run');
+    sequence(ids, 'beat', false, true, true);
     const sec = t - from;
     if (t + sec + (pending ? pending.sec : 0) > seconds && mark.trials > 0) {
       steps.length = mark.steps;
       trials.length = mark.trials;
       parts.length = mark.parts;
+      guide.length = mark.guide;
+      for (const key of Object.keys(told)) told[key] = mark.told[key] || 0;
       heard.length = mark.heard;
       t = mark.t;
       lastLabel = mark.lastLabel;
@@ -168,6 +215,7 @@ export function buildWalk({ model, index, manifest, getState, settings, plan, st
     return true;
   };
 
+  says('intro');
   const beats = [...plan.newBeats, ...plan.ahead].filter((id) => beatById.has(id));
   const taught = new Set();
   const extraDone = new Set(); // an extra run of each scene at most once a tape
@@ -201,7 +249,8 @@ export function buildWalk({ model, index, manifest, getState, settings, plan, st
     if (trials.length === before) break; // nothing more can be added
   }
   secondRun();
-  return { steps, trials, parts, heard, duration: t, missing };
+  says('end');
+  return { steps, trials, parts, guide, heard, duration: t, missing };
 }
 
 // Which trial a double tap at this moment means: the earliest one whose window (gap, answer and

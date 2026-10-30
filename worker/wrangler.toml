@@ -1,0 +1,10 @@
+name = "off-script-cast"
+main = "index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[triggers]
+crons = ["*/15 * * * *"]
+
+[vars]
+ORIGIN = "https://harrisonwright0996-beep.github.io"

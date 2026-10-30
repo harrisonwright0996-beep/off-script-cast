@@ -15,7 +15,7 @@ async function check(page, where, found) {
   }
 }
 
-for (const theme of ['cream', 'light', 'dark']) {
+for (const theme of ['stage', 'cream', 'light', 'dark']) {
   test(`every screen in the ${theme} theme`, async ({ page }) => {
     const found = [];
     await page.goto('./');
@@ -32,7 +32,7 @@ for (const theme of ['cream', 'light', 'dark']) {
       const lines = [{ speaker: first.cue.speaker, text: first.cue.text }, { speaker: first.speaker, text: first.text }];
       window.offScript.index.cues.set(second.id, { ...second.cue, lead: [first.id], lines, nth: 2 });
     });
-    await page.getByRole('button', { name: 'Start sprint' }).click();
+    await page.getByRole('button', { name: 'Start learning' }).click();
     await page.waitForFunction(() => window.offScript.card);
     await check(page, 'card: test', found);
     await page.getByRole('button', { name: 'Try it' }).click();
@@ -76,18 +76,18 @@ for (const theme of ['cream', 'light', 'dark']) {
     await check(page, 'card: first letters result', found);
     await page.getByRole('button', { name: 'Stop' }).click();
 
-    await page.getByRole('button', { name: 'Choose what to practise' }).click();
-    await expect(page.getByRole('heading', { name: 'Choose what to practise' })).toBeVisible(); // drawn once any saved practice is read
+    await page.getByRole('button', { name: 'Choose' }).click();
+    await expect(page.getByRole('heading', { name: 'Choose' })).toBeVisible(); // drawn once any saved practice is read
     await check(page, 'choose', found);
     await page.getByLabel('Which lines').selectOption({ label: 'Every line' });
     await check(page, 'choose: every line', found);
-    await page.getByRole('button', { name: 'Today', exact: true }).click();
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
     await page.getByRole('button', { name: 'Run through' }).click();
     await expect(page.getByRole('heading', { name: 'Run through' })).toBeVisible();
     await check(page, 'run through', found);
-    await page.getByRole('button', { name: 'Today', exact: true }).click();
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
 
-    await page.getByRole('button', { name: 'Scenes' }).click();
+    await page.getByRole('button', { name: 'My lines' }).click();
     await check(page, 'scenes', found);
     await page.getByRole('button', { name: /Scene 1: The Harbour/ }).click();
     await check(page, 'reader', found);
@@ -116,21 +116,19 @@ for (const theme of ['cream', 'light', 'dark']) {
     await page.getByRole('button', { name: 'End walk' }).waitFor();
     await check(page, 'walk: reading aloud', found);
 
-    await page.evaluate(() => window.offScript.go('setup', { reimport: true }));
-    await check(page, 'import again', found);
 
     for (const f of found) console.log(`${theme} | ${f.where} | ${f.impact} | ${f.id}: ${f.help} | ${f.nodes.join(', ')}`);
     expect(found.filter((f) => f.impact === 'serious' || f.impact === 'critical')).toEqual([]);
   });
 }
 
-for (const theme of ['cream', 'light', 'dark']) {
+for (const theme of ['stage', 'cream', 'light', 'dark']) {
   test(`a slip of the finger and a word missed before, in the ${theme} theme`, async ({ page }) => {
     const found = [];
     await importScript(page);
     await page.evaluate((t) => window.offScript.saveSettings({ theme: t }), theme);
     await page.evaluate(() => window.offScript.go('today'));
-    await page.getByRole('button', { name: 'Start sprint' }).click();
+    await page.getByRole('button', { name: 'Start learning' }).click();
     await page.getByRole('button', { name: 'Try it' }).click();
     await page.getByRole('group', { name: 'Who speaks next?' }).getByRole('button', { name: 'Cast', exact: true }).click();
     const keys = await keysOf(page);
@@ -152,7 +150,7 @@ test('a first letters card with blanks, in every theme', async ({ page }) => {
   const found = [];
   await importScript(page);
   const id = await page.evaluate(() => window.offScript.model.items.find((x) => x.words >= 8).id);
-  for (const theme of ['cream', 'light', 'dark']) {
+  for (const theme of ['stage', 'cream', 'light', 'dark']) {
     await page.evaluate((t) => window.offScript.saveSettings({ theme: t }), theme);
     await seedOnce(page, id);
     await check(page, `card: fewer first letters (${theme})`, found);

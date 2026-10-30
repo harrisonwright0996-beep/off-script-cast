@@ -16,7 +16,7 @@ export function practiceLines({ model, getState, scene = null, which }) {
   return model.items.filter((it) => (scene === null || it.scene === scene) && KEEP[which](getState(it.id))).map((it) => it.id);
 }
 
-export const practiceTitle = ({ model, scene = null, which }) => `${scene === null ? 'The whole play' : model.scenes[scene].heading}, ${NAMES[which]}`;
+export const practiceTitle = ({ model, scene = null, which }) => `${scene === null ? 'All my lines' : model.scenes[scene].heading}, ${NAMES[which]}`;
 
 // Goes a started line gets: from the cue alone, or the first letters first and later without (a
 // little more when it is read first). Left to Off Script, as the sprint decides (session.js).
