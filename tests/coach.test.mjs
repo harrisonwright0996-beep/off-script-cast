@@ -311,10 +311,10 @@ test('a role played as someone else is spoken in full, and only such roles are m
   assert.equal(texts.get(`p-${roles[0]}`), spokenRole(roles[0]));
 });
 
-test('the coach: says out loud and what a tap does; the phone reading aloud never mentions earbuds', () => {
-  assert.match(COACH.intro, /out loud/);
+test('the coach: says aloud and what a tap does; the phone reading aloud never mentions earbuds', () => {
+  assert.match(COACH.intro, /aloud/);
   assert.match(COACH.intro, /That shows the app what to bring back\./);
-  assert.match(COACH_SPEECH.intro, /out loud/);
+  assert.match(COACH_SPEECH.intro, /aloud/);
   assert.doesNotMatch(COACH_SPEECH.intro, /earbud/);
   assert.match(COACH.end, /tap any you missed/);
   const { model } = fixtureModel();
