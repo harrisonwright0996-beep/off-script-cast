@@ -161,16 +161,18 @@ test('progress survives a reload, and the sprint carries on where it was', async
 
 // Offline for real: a server of its own, stopped once the app is installed. (Playwright's WebKit
 // cannot emulate offline with a service worker, so this works the same way in both browsers.)
+const OFFLINE_PORT = String(Number(process.env.PORT || 4174) + 25);
+
 test('works offline once installed, with the server gone', async ({ page }) => {
-  const server = spawn(process.execPath, ['tools/serve.mjs', '4199'], { stdio: 'ignore' });
+  const server = spawn(process.execPath, ['tools/serve.mjs', OFFLINE_PORT], { stdio: 'ignore' });
   try {
-    await expect.poll(async () => fetch('http://localhost:4199/off-script-cast/').then((r) => r.status).catch(() => 0)).toBe(200);
-    await importScript(page, 'http://localhost:4199/off-script-cast/');
+    await expect.poll(async () => fetch(`http://localhost:${OFFLINE_PORT}/off-script-cast/`).then((r) => r.status).catch(() => 0)).toBe(200);
+    await importScript(page, `http://localhost:${OFFLINE_PORT}/off-script-cast/`);
     await page.evaluate(() => navigator.serviceWorker.ready);
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
     server.kill();
-    await expect.poll(async () => fetch('http://localhost:4199/off-script-cast/').then(() => 'up').catch(() => 'down')).toBe('down');
+    await expect.poll(async () => fetch(`http://localhost:${OFFLINE_PORT}/off-script-cast/`).then(() => 'up').catch(() => 'down')).toBe('down');
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Start learning' }).click();
