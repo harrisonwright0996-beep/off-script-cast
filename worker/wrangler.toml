@@ -7,7 +7,7 @@ workers_dev = true
 crons = ["*/15 * * * *"]
 
 [vars]
-ORIGIN = "https://harrisonwright0996-beep.github.io"
+ORIGIN = "https://off-script-cast.pages.dev"
 # After the show, add CLOSED = "1" here and deploy: every phone then learns the pack is gone.
 
 [[kv_namespaces]]

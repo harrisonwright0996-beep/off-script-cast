@@ -10,7 +10,7 @@ test('the offline cache lists every app file, and only those', () => {
   const listed = [...read('sw.js').matchAll(/^\s+'([^']+)',$/gm)].map((m) => m[1]);
   // docx.js, build.js and subset.js are only used on the laptop, to make packs.
   const laptop = ['src/docx.js', 'src/cast/build.js', 'src/cast/subset.js'];
-  const want = ['./', 'index.html', 'styles.css', 'manifest.webmanifest', 'vendor/fflate.js', ...ls('src', '.js'), ...ls('src/cast', '.js'), ...ls('src/ui', '.js'), ...ls('icons', '.png')].filter((f) => !laptop.includes(f));
+  const want = ['./', 'styles.css', 'manifest.webmanifest', 'vendor/fflate.js', ...ls('src', '.js'), ...ls('src/cast', '.js'), ...ls('src/ui', '.js'), ...ls('icons', '.png')].filter((f) => !laptop.includes(f));
   assert.deepEqual([...listed].sort(), want.sort());
 });
 

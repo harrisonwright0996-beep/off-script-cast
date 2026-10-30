@@ -38,5 +38,6 @@ node tools/set-worker.mjs --url https://off-script-cast.<name>.workers.dev --vap
 * `npm run serve` serves the app at http://localhost:4173/off-script-cast/
 * `npm run privacy` checks that no listed name, script or audio file is in the repository.
 * Change `VERSION` in `sw.js` with every release, so phones pick up the update.
+* `npm run publish:app` publishes the app to Cloudflare Pages, at https://off-script-cast.pages.dev/
 
 No build step and no runtime dependencies: plain ES modules, with fflate (MIT) vendored for zip files. The worker has a single file and no dependencies.
