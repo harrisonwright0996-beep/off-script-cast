@@ -9,7 +9,7 @@
 // In --out: code.txt (kept between runs, so a remake keeps the same code), token-hash.txt, files/.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { randomInt } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -34,6 +34,10 @@ const spoken = (note) => note.replace(/[[\]]/g, '').trim();
 export function makeCode(pick = randomInt) {
   return Array.from({ length: 4 }, () => WORDS[pick(WORDS.length)]).join(' ');
 }
+
+// A pack's file name. It comes from the token, so testing a guessed code against a name still costs
+// the full PBKDF2 of deriveKeys. The same every run, so a remake keeps the names.
+export const packFile = (token, name) => `p${createHash('sha256').update(`${token}|${name}`).digest('hex').slice(0, 32)}`;
 
 // One clip in the audio pack's format.
 async function say(text, work, name) {
@@ -96,7 +100,7 @@ export async function main(argv) {
   let total = 0;
   for (const member of cast.members) {
     const { sub, zip } = memberPack(model, member, audio, { coach, notes });
-    const file = `p${fnv1a(`${code}|${member.name}`)}`;
+    const file = packFile(keys.token, member.name);
     const sealed = await seal(keys.key, zip);
     await writeFile(join(out, 'files', file), sealed);
     total += sealed.length;

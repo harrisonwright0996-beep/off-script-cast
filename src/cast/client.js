@@ -7,7 +7,7 @@ import { unzipSync, strFromU8 } from '../../vendor/fflate.js';
 export class CastError extends Error {
   constructor(code) {
     super(code);
-    this.code = code; // 'wrong-code' | 'too-many' | 'offline' | 'damaged'
+    this.code = code; // 'wrong-code' | 'too-many' | 'offline' | 'damaged' | 'gone'
   }
 }
 
@@ -20,6 +20,7 @@ async function fetchFile(name, token) {
   }
   if (res.status === 401) throw new CastError('wrong-code');
   if (res.status === 429) throw new CastError('too-many');
+  if (res.status === 410) throw new CastError('gone');
   if (!res.ok) throw new CastError('offline');
   return res.arrayBuffer();
 }

@@ -38,6 +38,23 @@ test('the page can reach only its own worker, and has no inline script or style'
   }
 });
 
+test('the startup watchdog loads before the app, is cached, and is in syntax any browser can read', () => {
+  const html = read('index.html');
+  assert.ok(html.indexOf('<script src="src/boot.js"></script>') > 0, 'a classic script');
+  assert.ok(html.indexOf('src/boot.js') < html.indexOf('src/app.js'));
+  assert.match(read('sw.js'), /^\s+'src\/boot\.js',$/m);
+  const code = read('src/boot.js').replace(/^\s*\/\/.*$/gm, '').replace(/'[^']*'/g, "''");
+  assert.doesNotMatch(code, /=>|`|\b(let|const|class|async|await|import|export)\b|\?\.|\?\?/);
+  assert.match(code, /window\.offScript/);
+  assert.match(read('src/app.js'), /window\.offScript = ctx/);
+});
+
+test('a reminder never names a time to spend', () => {
+  const sw = read('sw.js');
+  assert.match(sw, /A quick round now will bring them back\./);
+  assert.doesNotMatch(sw, /Two minutes/);
+});
+
 test('no italics anywhere', () => {
   assert.match(read('styles.css'), /font-style: normal !important/);
   for (const f of [...ls('src/ui', '.js'), 'index.html']) assert.doesNotMatch(read(f), /<(i|em)>|'(i|em)'/, `${f} uses no italic elements`);
