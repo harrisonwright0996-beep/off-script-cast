@@ -213,3 +213,12 @@ test('the company code is four words', () => {
   assert.equal(code.split(' ').length, 4);
   assert.equal(cleanCode(code), cleanCode(code.toUpperCase().replace(/ /g, '  ')));
 });
+
+test('placards and on screen words are never taught, checked or counted, for anyone', () => {
+  const { model: whole } = fixtureModel();
+  const unspoken = whole.scenes.flatMap((sc) => sc.reader).filter((r) => r.t === 'placard' || r.t === 'screen').map((r) => r.text);
+  assert.ok(unspoken.length >= 2, 'the invented play has both');
+  const m = memberModel(whole, whole.items.map((it) => it.id), { self: null });
+  for (const text of unspoken) assert.ok(!m.items.some((it) => it.text.includes(text)), 'taught as a line');
+  assert.equal(m.totals.words, m.items.reduce((n, it) => n + it.words, 0));
+});
