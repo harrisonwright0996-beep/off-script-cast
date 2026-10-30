@@ -100,7 +100,7 @@ export function showInstall(ctx) {
     screen({
       title: 'Install Off Script',
       body: [h('p', { class: 'lead' }, info.lead), list(info.steps), info.copy ? button('Copy link', copy, { class: 'btn' }) : null, said, others, all],
-      footer: [install, h('p', { class: 'help' }, 'If you carry on here and install later, you will start again.'), button('Carry on without installing', carryOn, { class: 'btn link' })].filter(Boolean),
+      footer: [install, kind.startsWith('ios') || kind === 'in-app' ? h('p', { class: 'help' }, 'If you carry on here and install later, you will start again.') : null, button('Carry on without installing', carryOn, { class: 'btn link' })].filter(Boolean),
     }),
   );
 }

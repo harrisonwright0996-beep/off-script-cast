@@ -109,7 +109,7 @@ export async function openStore(name = DB) {
           c.continue();
         };
       }
-      for (const key of ['sprint', 'practice']) tx.objectStore('kv').delete(key);
+      for (const key of ['sprint', 'practice', 'walkDraft']) tx.objectStore('kv').delete(key);
       await done(tx);
     },
 

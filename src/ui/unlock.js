@@ -6,7 +6,7 @@ import { askToPersist } from '../store.js';
 
 const PROBLEMS = {
   'wrong-code': 'That code is not right. Check it and try again.',
-  'too-many': 'Too many tries. Wait an hour, then try again.',
+  'too-many': 'Too many tries. Wait a minute, then try again.',
   offline: 'Could not reach Off Script. Check you have signal, then try again.',
   damaged: 'Something went wrong getting your lines. Try again in a minute.',
   gone: 'The show is over, so these lines are no longer here. Well done.',

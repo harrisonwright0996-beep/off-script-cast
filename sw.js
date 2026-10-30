@@ -79,7 +79,7 @@ self.addEventListener('fetch', (event) => {
 
 // A reminder is an empty push: the words were saved on the phone the last time the app was used, so
 // they never leave it. A push must always show something.
-const DEFAULT_NUDGE = { title: 'Off Script', body: 'Your lines are starting to fade. A quick round now will bring them back.' };
+const DEFAULT_NUDGE = { title: 'Off Script', body: 'Your lines are ready when you are. Fancy a quick round?' };
 
 // Whether nothing is saved, as after Remove everything. Safari keeps an empty database even from an
 // aborted open, so look first where the phone can.
