@@ -214,7 +214,6 @@ test('the end of the show is a real day, in the form today is compared with', ()
   assert.ok('2027-01-31' <= ENDS && '2027-02-01' > ENDS);
 });
 
-test('a line already known is learnt and proved at once, and comes back as a check', () => {
 test('a line already known needs no teaching, but is not learnt until typed right on a later day', () => {
   const s = applyKnown(newState('x'), { day: '2026-11-02', time: 1000 });
   assert.equal(s.status, 'review');

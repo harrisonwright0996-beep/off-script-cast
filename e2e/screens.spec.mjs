@@ -416,7 +416,7 @@ test.describe('on Android', () => {
     await fakeWorker(page);
     await page.goto('./');
     await expect(page.getByRole('heading', { name: 'Install Off Script' })).toBeVisible();
-    await expect(page.getByText('If you carry on here and install later, you will start again.')).toBeVisible();
+    await expect(page.getByText('If you carry on here and install later, you will start again.')).toHaveCount(0); // Android keeps the same storage
     await page.getByRole('button', { name: 'Install Off Script' }).click();
     await expect(page.getByText('Follow the steps above', { exact: false })).toBeVisible();
     await page.getByRole('button', { name: 'Not your device? See all the steps' }).click();
