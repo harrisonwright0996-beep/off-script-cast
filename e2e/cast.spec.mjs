@@ -225,8 +225,9 @@ test('a long random run as a pupil: nothing breaks, and % learnt stays between 0
   for (let go = 0; go < 400; go++) {
     const on = async (name, exact = true) => {
       const b = page.getByRole('button', { name, exact });
-      if (await b.count()) await b.first().click();
-      return (await b.count()) > 0;
+      if (!(await b.count())) return false;
+      await b.first().click({ timeout: 2000 }).catch(() => {}); // the screen may have moved on
+      return true;
     };
     await page.waitForTimeout(20);
     const keypad = page.locator('.keypad');
