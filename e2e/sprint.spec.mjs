@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { test, expect, importScript, answerCard, keysOf, seedOnce } from './helpers.mjs';
+import { test, expect, enrol, importScript, answerCard, keysOf, seedOnce } from './helpers.mjs';
 import { fixtureModel } from '../tests/helpers.mjs';
 import { blankOf, firstLettersOf, gapsOf, joinTokens, phraseStarts } from '../src/tokens.js';
 
@@ -13,7 +13,7 @@ test('a sprint by keypad: a new line stays with him up the ladder, with less hel
   await shot(page, 'card-test');
   await page.getByRole('button', { name: 'Teach me' }).click();
   await expect(page.getByText('We are the ones who stayed.', { exact: false })).toBeVisible();
-  await expect(page.getByText('A new line stays with you for a few goes, with less help each time.')).toBeVisible();
+  await expect(page.getByText('The cue is the line just before yours. Each go gives you less help.')).toBeVisible();
   await expect(page.getByText('step 1 of 5', { exact: false })).toBeVisible();
   await shot(page, 'card-front');
   await page.getByRole('button', { name: 'Next', exact: true }).click();
@@ -21,7 +21,7 @@ test('a sprint by keypad: a new line stays with him up the ladder, with less hel
   const first = model.items[0];
 
   // Some words taken out: the longest of every three, each a gap.
-  await expect(page.getByText('Say it aloud, gaps too, then reveal it.')).toBeVisible();
+  await expect(page.getByText('Say the whole line aloud, filling the gaps, then reveal it.')).toBeVisible();
   await expect(page.getByText('step 2 of 5', { exact: false })).toBeVisible();
   const gaps = [...gapsOf(first.tokens)];
   expect(gaps.length).toBeGreaterThan(1);
@@ -36,7 +36,7 @@ test('a sprint by keypad: a new line stays with him up the ladder, with less hel
 
   // Then just the first letters.
   await expect(page.getByText(joinTokens(first.tokens, (t) => firstLettersOf(t)))).toBeVisible();
-  await expect(page.getByText('Say it aloud from the first letters, then reveal it.')).toBeVisible();
+  await expect(page.getByText('Each letter starts a word. Say the whole line aloud, then reveal it.')).toBeVisible();
   await shot(page, 'card-help');
   await page.getByRole('button', { name: 'Reveal' }).click();
   await page.getByRole('button', { name: 'Done' }).click();
@@ -45,7 +45,7 @@ test('a sprint by keypad: a new line stays with him up the ladder, with less hel
   await page.getByRole('button', { name: 'Next', exact: true }).click();
 
   // Then fewer of them.
-  await expect(page.getByText('Say it aloud, blanks too, then reveal it.')).toBeVisible();
+  await expect(page.getByText('Say the whole line aloud, filling the blanks, then reveal it.')).toBeVisible();
   await expect(page.locator('.line .blank')).toHaveCount(first.words - phraseStarts(first.tokens).size);
   await shot(page, 'card-fewer-letters');
   await answerCard(page);
@@ -63,7 +63,7 @@ test('a sprint by keypad: a new line stays with him up the ladder, with less hel
   await expect(page.getByRole('button', { name: 'Teach me' })).toBeVisible();
   for (let i = 0; i < 20 && (await page.locator('h1').textContent()) === 'New'; i++) await answerCard(page);
   await expect(page.getByRole('heading', { name: 'Learning', exact: true })).toBeVisible();
-  await expect(page.getByText('Each new line comes back on its own and out of order, until it is right from its cue twice.')).toBeVisible();
+  await expect(page.getByText('New lines come back mixed up, until you get each one right twice from its cue.')).toBeVisible();
   const shown = async () => {
     const id = await page.evaluate(() => window.offScript.card.item.id);
     return model.items.find((x) => x.id === id);
@@ -96,13 +96,22 @@ test('a sprint by keypad: a new line stays with him up the ladder, with less hel
   expect(await perfect()).toBeGreaterThan(0);
 });
 
-test('a miss shows the right word and comes back through first letters; undo puts it back', async ({ page }) => {
+test('a miss shows the right word and comes back through first letters; undo puts back a wrong tap, never a typed miss', async ({ page }) => {
   await importScript(page);
   await page.getByRole('button', { name: 'Start learning' }).click();
   await page.getByRole('button', { name: 'Try it' }).click();
+  // A plain wrong tap: the wrong speaker, the line typed right. Undo puts it back.
   await page.getByRole('group', { name: 'Who speaks next?' }).getByRole('button', { name: 'Keeper', exact: true }).click();
   await expect(page.getByText('It was Cast', { exact: false }).or(page.locator('.chip.right'))).toBeVisible();
   const keys = await keysOf(page);
+  await page.keyboard.type(keys);
+  await expect(page.locator('.result.misses')).toHaveText(/It was Cast/);
+  await page.getByRole('button', { name: 'Undo last answer' }).click();
+  await expect(page.getByText('Who speaks next?')).toBeVisible();
+  const states = await page.evaluate(() => [...window.offScript.states.values()]);
+  expect(states.every((st) => st.status === 'new' && st.misses === 0)).toBe(true);
+  expect(await page.evaluate(() => window.offScript.events.length)).toBe(0);
+  await page.getByRole('group', { name: 'Who speaks next?' }).getByRole('button', { name: 'Keeper', exact: true }).click();
   await page.keyboard.type('?' + keys.slice(1));
   await expect(page.locator('.result.misses')).toHaveText(/It was Cast\. One miss: We/);
   await expect(page.locator('.tok.miss')).toHaveCount(1);
@@ -113,17 +122,11 @@ test('a miss shows the right word and comes back through first letters; undo put
   expect(last.ms).toBeGreaterThanOrEqual(last.firstMs);
   expect(last.firstMs).toBeGreaterThanOrEqual(0);
   await shot(page, 'card-result-miss');
-  await page.getByRole('button', { name: 'Undo last answer' }).click();
-  await expect(page.getByText('Who speaks next?')).toBeVisible();
-  const states = await page.evaluate(() => [...window.offScript.states.values()]);
-  expect(states.every((st) => st.status === 'new' && st.misses === 0)).toBe(true);
-  expect(await page.evaluate(() => window.offScript.events.length)).toBe(0);
-  await page.getByRole('group', { name: 'Who speaks next?' }).getByRole('button', { name: 'Cast', exact: true }).click();
-  await page.keyboard.type('z' + keys.slice(1));
+  await expect(page.getByRole('button', { name: 'Undo last answer' })).toHaveCount(0); // the line is on show now
   await page.getByRole('button', { name: 'Next', exact: true }).click();
-  await expect(page.getByText('Say it aloud, meaning it.')).toBeVisible(); // a missed try is taught: read it
+  await expect(page.getByText('Say it aloud as if you mean it.')).toBeVisible(); // a missed try is taught: read it
   await page.getByRole('button', { name: 'Next', exact: true }).click();
-  await expect(page.getByText('Say it aloud, gaps too, then reveal it.')).toBeVisible(); // then up the ladder
+  await expect(page.getByText('Say the whole line aloud, filling the gaps, then reveal it.')).toBeVisible(); // then up the ladder
   await page.getByRole('button', { name: 'Reveal' }).click();
   await page.getByRole('group', { name: 'Tap any word you missed or changed' }).getByRole('button').first().click();
   await page.getByRole('button', { name: 'Done' }).click();
@@ -190,7 +193,7 @@ test('time up: the lines still to finish come first, then Sprint done and a brea
   await answerCard(page); // Some words taken out: time is up, so nothing new, but the climb goes on
   await expect(page.getByRole('heading', { name: 'New', exact: true })).toBeVisible();
   await expect(page.getByText("Nearly there. Just the lines still to finish, then you're done.")).toBeVisible();
-  await expect(page.getByText('Say it aloud from the first letters, then reveal it.')).toBeVisible();
+  await expect(page.getByText('Each letter starts a word. Say the whole line aloud, then reveal it.')).toBeVisible();
   await shot(page, 'card-closing');
   await answerCard(page); // the first letters
   await answerCard(page); // fewer of them
@@ -200,7 +203,7 @@ test('time up: the lines still to finish come first, then Sprint done and a brea
   await expect(page.getByText('Stand up, drink some water', { exact: false })).toHaveCount(0); // no break to take: a science note instead
   await expect(page.locator('.science')).toBeVisible();
   await shot(page, 'sprint-done');
-  await page.getByRole('button', { name: 'Back to my lines' }).click();
+  await page.getByRole('button', { name: 'Back to your lines' }).click();
   await page.evaluate(() => window.offScript.go('sprint', { minutes: 0.02 }));
   await page.waitForTimeout(1300);
   await answerCard(page); // the line still being learned, with the first letters
@@ -264,7 +267,7 @@ test('on a short screen, a long cue and line: the line being typed stays above t
   expect(await page.evaluate(() => window.scrollY)).toBe(0); // the next card starts at its cue
 });
 
-test('a slip of the finger: a wrong key touching the right one can be counted right, and undone', async ({ page }) => {
+test('a slip of the finger: one wrong key touching the right one can be counted right, proves nothing, and has no Undo', async ({ page }) => {
   await importScript(page);
   await page.getByRole('button', { name: 'Start learning' }).click();
   await page.getByRole('button', { name: 'Try it' }).click();
@@ -277,18 +280,174 @@ test('a slip of the finger: a wrong key touching the right one can be counted ri
   await page.getByRole('button', { name: 'A slip of the finger? Count it right' }).click();
   await expect(page.locator('.result.perfect')).toHaveText(/Counted right: a slip of the finger/);
   expect(await page.evaluate(() => window.offScript.events.map((e) => [e.pass, !!e.slip]))).toEqual([[true, true]]);
-  await page.getByRole('button', { name: 'Undo last answer' }).click();
-  await expect(page.getByText('Who speaks next?')).toBeVisible();
-  expect(await page.evaluate(() => window.offScript.events.length)).toBe(0);
-  // A wrong key nowhere near the right one is a miss, with nothing to count it right. That word was
-  // missed in this line once before (as if on an earlier day), so the result says so.
-  await page.evaluate(() => window.offScript.events.push({ time: Date.now() - 86400000, day: '2026-10-25', id: window.offScript.card.item.id, pass: false, mode: 'type', misses: 1, missed: [0] }));
+  expect(await page.evaluate(() => window.offScript.getState(window.offScript.card.item.id).proved)).toBe(false);
+  await expect(page.getByRole('button', { name: 'Undo last answer' })).toHaveCount(0); // it would be a look at the answer
+});
+
+test('a wrong key nowhere near the right one, or two near it, is a miss with nothing to count it right; a word missed before is named', async ({ page }) => {
+  await importScript(page);
+  await page.getByRole('button', { name: 'Start learning' }).click();
+  await page.getByRole('button', { name: 'Try it' }).click();
   await page.getByRole('group', { name: 'Who speaks next?' }).getByRole('button', { name: 'Cast', exact: true }).click();
+  const keys = await keysOf(page);
+  // That word was missed in this line once before, as if on an earlier day.
+  await page.evaluate(() => window.offScript.events.push({ time: Date.now() - 86400000, day: '2026-10-25', id: window.offScript.card.item.id, pass: false, mode: 'type', misses: 1, missed: [0] }));
   await page.keyboard.type('p' + keys.slice(1));
   await expect(page.locator('.result.misses')).toHaveText(/One miss: We/);
   await expect(page.getByRole('button', { name: /slip of the finger/ })).toHaveCount(0);
-  await expect(page.getByText('Missed here before as well: We.')).toBeVisible();
+  await expect(page.getByText('Tricky words for you: We.')).toBeVisible();
   await shot(page, 'card-result-trouble');
+});
+
+// A key touching each key.
+const near = { q: 'w', w: 'e', e: 'r', r: 't', t: 'y', y: 'u', u: 'i', i: 'o', o: 'p', p: 'o', a: 's', s: 'd', d: 'f', f: 'g', g: 'h', h: 'j', j: 'k', k: 'l', l: 'k', z: 'x', x: 'c', c: 'v', v: 'b', b: 'n', n: 'm', m: 'n' };
+
+// A line learnt and proved, on a card from its cue, typed.
+async function provedCard(page, words = 3) {
+  await enrol(page);
+  await page.getByRole('button', { name: 'No, start from the beginning' }).click();
+  const id = await page.evaluate(async (words) => {
+    const o = window.offScript;
+    await o.saveSettings({ mode: 'type' });
+    const it = o.model.items.find((x) => x.words >= words);
+    const day = o.today();
+    o.states.set(it.id, { ...o.getState(it.id), status: 'review', firstDay: day, learnedDay: day, passes: 3, helped: 1, stability: 200, passDays: [day], lastResult: 'pass', lastDay: day, lastTime: Date.now() - 3600000, proved: true });
+    await o.store.putStates([o.states.get(it.id)]);
+    o.go('sprint', { custom: { itemIds: [it.id], help: 'none' } });
+    return it.id;
+  }, words);
+  await page.waitForFunction(() => window.offScript.card && window.offScript.card.step === 'floor');
+  await page.locator('.keypad').waitFor();
+  return id;
+}
+const saved = (page, id) => page.evaluate(async (id) => (await window.offScript.store.allStates()).find((s) => s.id === id), id);
+
+test('a wrong key counts at once: Stop keeps the miss, and the proof is gone', async ({ page }) => {
+  const id = await provedCard(page);
+  const keys = await keysOf(page);
+  await page.keyboard.press(keys[0] === 'z' ? 'p' : 'z');
+  await expect(page.locator('.tok.miss')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Stop' }).click();
+  await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
+  const s = await saved(page, id);
+  expect([s.lastResult, s.proved, s.misses]).toEqual(['miss', false, 1]);
+});
+
+test('a look with ? then a reload still counts as a miss', async ({ page }) => {
+  const id = await provedCard(page);
+  await page.keyboard.press('?');
+  await expect(page.locator('.tok.miss')).toHaveCount(1);
+  await page.waitForFunction(async (id) => (await window.offScript.store.allStates()).find((s) => s.id === id).lastResult === 'miss', id);
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
+  const s = await saved(page, id);
+  expect([s.lastResult, s.proved]).toEqual(['miss', false]);
+});
+
+test('after a wrong key there is no changing to Say and back, and finishing the line saves one answer', async ({ page }) => {
+  const id = await provedCard(page, 4);
+  const keys = await keysOf(page);
+  await expect(page.getByRole('button', { name: 'Say it instead' })).toBeVisible();
+  await page.keyboard.press('?');
+  await expect(page.getByRole('button', { name: 'Say it instead' })).toHaveCount(0);
+  await page.keyboard.type(keys.slice(1));
+  await expect(page.locator('.result.misses')).toBeVisible();
+  const events = await page.evaluate((id) => window.offScript.events.filter((e) => e.id === id).map((e) => [e.pass, e.misses]), id);
+  expect(events).toEqual([[false, 1]]);
+  expect((await saved(page, id)).proved).toBe(false);
+});
+
+test('a slip left half way counts as a miss', async ({ page }) => {
+  const id = await provedCard(page, 4);
+  const keys = await keysOf(page);
+  await page.keyboard.press(near[keys[0]]);
+  await expect(page.locator('.tok.miss')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Stop' }).click();
+  await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
+  expect((await saved(page, id)).lastResult).toBe('miss');
+});
+
+test('a slip finished can be counted right, once, and leaves no miss behind', async ({ page }) => {
+  const id = await provedCard(page, 4);
+  const keys = await keysOf(page);
+  await page.keyboard.type(near[keys[0]] + keys.slice(1));
+  await page.getByRole('button', { name: 'A slip of the finger? Count it right' }).click();
+  await expect(page.locator('.result.perfect')).toHaveText(/Counted right/);
+  const s = await saved(page, id);
+  expect([s.lastResult, s.proved]).toEqual(['pass', true]); // already proved: a slip neither wins nor loses it
+  await expect(page.getByRole('button', { name: /slip of the finger/ })).toHaveCount(0);
+});
+
+test('two slips, or a slip on a short line, cannot be counted right', async ({ page }) => {
+  await provedCard(page, 4);
+  const keys = await keysOf(page);
+  await page.keyboard.type(near[keys[0]] + near[keys[1]] + keys.slice(2));
+  await expect(page.locator('.result.misses')).toBeVisible();
+  await expect(page.getByRole('button', { name: /slip of the finger/ })).toHaveCount(0);
+});
+
+test('Reveal puts the line on show, so a said card cannot change to typing', async ({ page }) => {
+  await provedCard(page);
+  await page.getByRole('button', { name: 'Say it instead' }).click();
+  await page.getByRole('button', { name: 'Reveal' }).click();
+  await expect(page.getByRole('button', { name: 'Type it instead' })).toHaveCount(0);
+});
+
+test('a Quick round after a stopped long round has its own time', async ({ page }) => {
+  await enrol(page);
+  await page.getByRole('button', { name: 'No, start from the beginning' }).click();
+  await page.getByRole('button', { name: 'Start learning' }).click();
+  await page.getByRole('button', { name: 'Try it' }).click();
+  await page.getByRole('button', { name: 'Reveal' }).click();
+  await page.getByRole('button', { name: 'Done' }).click();
+  await page.locator('.result').waitFor();
+  await page.getByRole('button', { name: 'Stop' }).click();
+  await page.evaluate(async () => {
+    const o = window.offScript;
+    const s = await o.store.get('sprint');
+    await o.store.set('sprint', { ...s, elapsed: 130000 });
+  });
+  await page.getByRole('button', { name: 'Quick round' }).click();
+  await expect(page.locator('.cue')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Keep going?' })).toHaveCount(0);
+});
+
+test('the newest word stays above the keypad on a long line in big text, here and in the check of what you know', async ({ page }) => {
+  await enrol(page);
+  await page.getByRole('button', { name: 'No, start from the beginning' }).click();
+  await page.evaluate(async () => {
+    const o = window.offScript;
+    await o.saveSettings({ mode: 'type', textSize: 200, lineSpacing: 2 });
+    const it = [...o.model.items].sort((a, b) => b.words - a.words)[0];
+    o.go('sprint', { custom: { itemIds: [it.id], help: 'none' } });
+  });
+  await page.locator('.keypad').waitFor();
+  const keys = await keysOf(page);
+  const clear = () => page.evaluate(() => {
+    const word = document.querySelector('.line.answer').lastElementChild.getBoundingClientRect();
+    return document.querySelector('footer').getBoundingClientRect().top - word.bottom;
+  });
+  for (const k of keys.slice(0, -1)) {
+    await page.keyboard.press(k);
+    expect(await clear()).toBeGreaterThanOrEqual(0);
+  }
+  await page.evaluate(() => window.offScript.go('checkin'));
+  await page.getByRole('button', { name: 'Yes, check what I know' }).click();
+  const first = await page.evaluate(() => window.offScript.model.items[0].tokens.filter((t) => t.k !== null).map((t) => t.k));
+  for (const k of first.slice(0, -1)) {
+    await page.keyboard.press(k);
+    expect(await clear()).toBeGreaterThanOrEqual(0);
+  }
+});
+
+test('Next is described by the result, and a spot check is said aloud', async ({ page }) => {
+  await provedCard(page);
+  const keys = await keysOf(page);
+  await page.keyboard.type(keys);
+  await expect(page.locator('.result')).toBeVisible();
+  const next = page.getByRole('button', { name: 'Next', exact: true });
+  expect(await next.getAttribute('aria-describedby')).toContain('result');
+  await expect(next).toHaveAccessibleDescription(/Word perfect/);
 });
 
 test('a long line right from its cue once: first letters only at the start of each phrase, a blank for every other word', async ({ page }) => {
@@ -299,7 +458,7 @@ test('a long line right from its cue once: first letters only at the start of ea
   await seedOnce(page, it.id);
   await expect(page.getByRole('heading', { name: 'Check', exact: true })).toBeVisible();
   await expect(page.getByText('As a line gets stronger, it shows fewer first letters. Say every word, the blanks too.')).toBeVisible();
-  await expect(page.getByText('Say it aloud, blanks too, then reveal it.')).toBeVisible();
+  await expect(page.getByText('Say the whole line aloud, filling the blanks, then reveal it.')).toBeVisible();
   const line = page.locator('.answer-area .line');
   await expect(line.locator('.blank')).toHaveCount(it.tokens.filter((t, i) => t.k !== null && !starts.has(i)).length);
   const seen = await line.evaluate((p) => {

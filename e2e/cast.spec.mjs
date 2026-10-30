@@ -1,5 +1,5 @@
 // A pupil's whole journey, with the invented play and a stand in for the worker.
-import { test, expect, enrol, open, keysOf, fakeWorker, CODE } from './helpers.mjs';
+import { test, expect, enrol, open, keysOf, fakeWorker, answerCard, CODE } from './helpers.mjs';
 
 test('a wrong code is told so kindly, and nothing is unlocked', async ({ page }) => {
   await open(page);
@@ -37,40 +37,123 @@ test('it opens straight to their lines the next time, and no date or time to spe
   await page.screenshot({ path: `shots/${test.info().project.name}-your-lines.png`, fullPage: true });
 });
 
-test('already know some: typed right counts as learnt, two misses end a scene, and it can stop', async ({ page }) => {
+// The keys for the line on show in the check of what you know, or wrong ones.
+const checkKeys = (page, wrong = false) => page.evaluate((wrong) => {
+  const n = Number(document.querySelector('.where').textContent.match(/: (\d+) of/)[1]);
+  return window.offScript.model.items[n - 1].tokens.filter((t) => t.k !== null).map((t) => (wrong ? (t.k === 'z' ? 'p' : 'z') : t.k)).join('');
+}, wrong);
+
+test('already know some: typed right needs no teaching, but the % waits for another day; it can stop', async ({ page }) => {
   await enrol(page);
   await page.getByRole('button', { name: 'Yes, check what I know' }).click();
   // Scene one: the first two lines right.
   for (let i = 0; i < 2; i++) {
-    await expect(page.locator('.where')).toContainText(`Checking your lines: ${i + 1}`);
-    await page.keyboard.type(await page.evaluate(() => {
-      const o = window.offScript;
-      const n = document.querySelector('.where').textContent.match(/(\d+)$/)[1];
-      return o.model.items[Number(n) - 1].tokens.filter((t) => t.k !== null).map((t) => t.k).join('');
-    }));
+    await expect(page.locator('.where')).toHaveText(`Checking your lines: ${i + 1} of 23`);
+    await page.keyboard.type(await checkKeys(page));
   }
+  await expect(page.locator('.result.perfect')).toHaveText(/Word perfect/);
   await page.getByRole('button', { name: 'That is enough, teach me' }).click();
   await expect(page.getByText(/You already know 2 lines/)).toBeVisible();
+  await expect(page.getByText('These lines will not need teaching. Type each one once more on another day and it counts towards your %.')).toBeVisible();
+  await expect(page.locator('main')).not.toContainText('% learnt');
   await page.getByRole('button', { name: 'Start learning' }).click();
   await expect(page.getByRole('heading', { name: 'Your lines' })).toBeVisible();
-  const proved = await page.evaluate(() => [...window.offScript.states.values()].filter((s) => s.proved && s.status === 'review').length);
-  expect(proved).toBe(2);
+  await expect(page.locator('.ring-num')).toHaveText('0%');
+  const known = await page.evaluate(() => {
+    const v = [...window.offScript.states.values()];
+    return [v.filter((s) => s.status === 'review').length, v.filter((s) => s.proved).length, window.offScript.plan().ready.size];
+  });
+  expect(known).toEqual([2, 0, 0]);
 });
 
-test('saying is not enough: the go that learns a line has to be typed', async ({ page }) => {
+test('already know some: one try a line, for good, even a line left part way or started again', async ({ page }) => {
+  await enrol(page);
+  await expect(page.getByText('Each line gets one try.', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Yes, check what I know' }).click();
+  await page.keyboard.type(await checkKeys(page, true)); // the first line wrong
+  await expect(page.locator('.result.misses')).toHaveText(/You will learn it/);
+  await expect(page.locator('.where')).toHaveText('Checking your lines: 2 of 23');
+  await page.keyboard.press('?'); // a look at the second, then away
+  await page.getByRole('button', { name: 'That is enough, teach me' }).click();
+  await page.getByRole('button', { name: 'Start learning' }).click();
+  await page.getByRole('button', { name: 'My lines' }).click();
+  await page.getByRole('button', { name: 'Already know some? Check them' }).click();
+  await page.getByRole('button', { name: 'Yes, check what I know' }).click();
+  await expect(page.locator('.where')).toHaveText('Checking your lines: 1 of 21');
+  await page.evaluate(async () => {
+    const o = window.offScript;
+    await o.startAgain();
+    await o.go('checkin');
+  });
+  await page.getByRole('button', { name: 'Yes, check what I know' }).click();
+  await expect(page.locator('.where')).toHaveText('Checking your lines: 1 of 21');
+});
+
+test('already know some: with every line tried, it says so kindly', async ({ page }) => {
   await enrol(page);
   await page.getByRole('button', { name: 'No, start from the beginning' }).click();
-  // A line right once: its next go from the cue is locked to typing.
+  await page.evaluate(async () => {
+    const o = window.offScript;
+    await o.store.set('checkTried', o.model.items.map((it) => it.id));
+    await o.go('checkin');
+  });
+  await expect(page.getByText('You have checked all you can.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Yes, check what I know' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Back to your lines' }).click();
+  await expect(page.getByRole('heading', { name: 'Your lines' })).toBeVisible();
+});
+
+test('already know some: two misses in a row say the rest of the scene is skipped', async ({ page }) => {
+  await enrol(page);
+  await page.getByRole('button', { name: 'Yes, check what I know' }).click();
+  await page.keyboard.type(await checkKeys(page, true));
+  await expect(page.locator('.where')).toContainText('2 of 23');
+  await page.keyboard.type(await checkKeys(page, true));
+  await expect(page.locator('.result.misses')).toHaveText(/two in a row, so we will skip the rest of this scene/);
+  await expect(page.locator('#live')).toContainText('skip the rest of this scene');
+  await expect(page.locator('.where')).toContainText('5 of 23'); // the next scene
+});
+
+test('the end of a round says what it gained', async ({ page }) => {
+  await enrol(page);
+  await page.getByRole('button', { name: 'No, start from the beginning' }).click();
+  await page.evaluate(() => window.offScript.saveSettings({ sprintMinutes: 0.01, mode: 'type' }));
+  await page.getByRole('button', { name: 'Start learning' }).click();
+  for (let i = 0; i < 40 && (await page.locator('h1').textContent()) !== 'Round done'; i++) await answerCard(page);
+  await expect(page.getByRole('heading', { name: 'Round done' })).toBeVisible();
+  await expect(page.locator('main .lead')).toHaveText(/^\d+ lines? on (its|their) way\.$/);
+  await page.getByRole('button', { name: 'Back to your lines' }).click();
+  await expect(page.locator('.ring-num')).toHaveText('0%');
+  await page.evaluate(async () => {
+    const o = window.offScript;
+    const it = o.model.items[0];
+    const day = o.today();
+    o.states.set(it.id, { ...o.getState(it.id), status: 'review', firstDay: day, learnedDay: day, passes: 3, helped: 1, stability: 200, passDays: [day], lastResult: 'pass', lastDay: day, lastTime: Date.now() - 3600000 });
+    await o.go('sprint', { scope: 'tests', minutes: 2 });
+  });
+  await page.locator('.keypad').waitFor();
+  await page.keyboard.type(await keysOf(page));
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Checks done' })).toBeVisible();
+  await expect(page.locator('main .lead')).toHaveText(/^Up \d+% to \d+%\.$/);
+});
+
+test('saying is not enough: the go that learns a line has to be typed, and is said aloud', async ({ page }) => {
+  await enrol(page);
+  await page.getByRole('button', { name: 'No, start from the beginning' }).click();
+  // A line said right but never typed: in a round, its next go from the cue is locked to typing.
   const id = await page.evaluate(() => {
     const o = window.offScript;
     const id = o.model.items[3].id;
     const day = o.today();
-    o.states.set(id, { ...o.getState(id), status: 'learning', firstDay: day, passes: 1, helped: 3, stability: 1, passDays: [day], lastResult: 'pass', lastDay: day, lastTime: Date.now() - 3600000, lastMode: 'say' });
-    o.go('sprint', { custom: { itemIds: [id], help: 'cue' } });
+    o.states.set(id, { ...o.getState(id), status: 'review', firstDay: day, learnedDay: day, passes: 3, helped: 3, stability: 200, passDays: [day], lastResult: 'pass', lastDay: day, lastTime: Date.now() - 3600000, lastMode: 'say' });
+    o.go('sprint', { scope: 'tests', minutes: 2 });
     return id;
   });
   await page.waitForFunction(() => window.offScript.card && window.offScript.card.step === 'floor');
-  await expect(page.getByText('Type this one to prove you know it.')).toBeVisible();
+  await expect(page.locator('.spot')).toHaveText('Type this one so it counts towards your %.');
+  expect(await page.locator('.spot').getAttribute('role')).toBeNull();
+  await expect(page.locator('#live')).toHaveText('Type this one so it counts towards your %.');
   await expect(page.getByRole('button', { name: 'Say it instead' })).toHaveCount(0);
   await expect(page.getByRole('group', { name: /Keypad/ })).toBeVisible();
   await page.keyboard.type(await keysOf(page));
@@ -152,7 +235,7 @@ test('a long random run as a pupil: nothing breaks, and % learnt stays between 0
       await page.keyboard.type(roll() < 0.2 ? `${keys[0] === 'z' ? 'x' : 'z'}${keys.slice(1)}` : keys);
     } else if (!(await on('Next')) && !(await on('Teach me')) && !(await on('Reveal'))) {
       if (await on('Done')) continue;
-      if (!(await on('Another round')) && !(await on('Learn more now')) && !(await on('An extra run')) && !(await on('Start learning'))) await on('Back to my lines');
+      if (!(await on('Another round')) && !(await on('Learn more now')) && !(await on('An extra run')) && !(await on('Start learning'))) await on('Back to your lines');
     }
   }
   const ring = Number((await page.evaluate(() => window.offScript.go('today').then(() => document.querySelector('.ring-num').textContent))).replace('%', ''));

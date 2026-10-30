@@ -26,21 +26,21 @@
 // At time up nothing new comes: the sprint carries on until every line it has shown is right without help.
 // The session never saves anything itself: answer() returns the event and new state for the app to
 // save, and advance() then picks the next card using the app's up to date states and plan.
-import { applyHelp, applyResult, needsTeaching } from './state.js';
+import { applyHelp, applyResult, knownToday, needsTeaching } from './state.js';
 import { SLOW, recallNow } from './memory.js';
 import { cueOf, fnv1a, speakerChoices } from './items.js';
 import { beatStage, testsOf, typedPerWord } from './plan.js';
 import { dayKey } from './dates.js';
 import { earnsProof, needsProof, spotCheck } from './cast/proof.js';
 
-export const TEACH_FIRST_MESSAGE = "This stretch is new to you, so I'll teach it first.";
+export const TEACH_FIRST_MESSAGE = 'These lines are new to you, so you will learn them first.';
 export const AHEAD_MESSAGE = 'Nice. These are extra new lines.';
 export const EXTRA_RUN_MESSAGE = 'Nice. This is an extra run.';
 export const AGAIN_MESSAGE = 'Lines come back later in the round until they are right without help.';
 export const CLOSING_MESSAGE = "Nearly there. Just the lines still to finish, then you're done.";
 export const LETTERS_MESSAGE = 'As a line gets stronger, it shows fewer first letters. Say every word, the blanks too.';
-export const SHUFFLE_MESSAGE = 'Each new line comes back on its own and out of order, until it is right from its cue twice.';
-export const LADDER_MESSAGE = 'A new line stays with you for a few goes, with less help each time.';
+export const SHUFFLE_MESSAGE = 'New lines come back mixed up, until you get each one right twice from its cue.';
+export const LADDER_MESSAGE = 'The cue is the line just before yours. Each go gives you less help.';
 
 export const GAP = 3; // other answers before a line comes back
 export const POOL = 2; // beats being learned at a time
@@ -80,10 +80,10 @@ export const rungsOf = (words) => ['read', words >= 4 && 'gaps', words >= 3 && '
 export const BACKS = 2; // misses on a ladder that go one rung back; one more and the line leaves it
 
 const FRONT_PROMPTS = [
-  'Say it aloud, meaning it.',
+  'Say it aloud as if you mean it.',
   'Stand up and say it to someone.',
   'Give it a gesture that fits.',
-  'What does this person want here?',
+  'What does your character want here?',
 ];
 
 const LABELS = { due: 'Check', new: 'New', beat: 'Learning', run: 'Run' };
@@ -149,6 +149,7 @@ export function createSession({ model, index, getPlan, getState, settings, scope
     if (mode === 'read') return 'read';
     if (mode === 'letters') return 'help';
     if (s.status === 'new') return 'clean'; // never practised: try it from the cue first
+    if (s.knownDay && !s.proved && s.lastResult === 'pass') return 'clean'; // the go that proves a line already known
     const { now: at, k } = plan();
     return helpFirst(s, at, k) ? 'help' : 'clean';
   }
@@ -205,6 +206,11 @@ export function createSession({ model, index, getPlan, getState, settings, scope
     return false;
   }
   const owing = (id) => byId.has(id) && S.lines[id].need !== 'done';
+
+  // Proof is earned only in the day's rounds: not in chosen practice, a run of a scene or an extra run,
+  // where nothing stops a line being said over and over with no gap.
+  const provable = (t) => !S.custom && !t.extra;
+  const dayNow = () => dayKey(new Date(now()));
 
   // A line of a beat still to be taught: never yet right, and not yet shown in this sprint.
   const toTeach = (beatId) => beatById.get(beatId).itemIds.find((id) => !S.lines[id] && needsTeaching(getState(id))) || null;
@@ -302,7 +308,7 @@ export function createSession({ model, index, getPlan, getState, settings, scope
     if (!S.extraSaid) S.message = EXTRA_RUN_MESSAGE;
     S.extraSaid = true;
     const r = p.extraRuns[0];
-    return { kind: 'seq', queue: 'run', scene: r.scene, ids: fresh([...r.itemIds]), pos: 0 };
+    return { kind: 'seq', queue: 'run', scene: r.scene, ids: fresh([...r.itemIds]), pos: 0, extra: true };
   }
 
   // Chosen practice: its lines in order, a run wherever they follow on in a scene, what is owed in between.
@@ -389,7 +395,7 @@ export function createSession({ model, index, getPlan, getState, settings, scope
       // Saying a line is on trust: the go that would count it as learned is typed, and so is a spot
       // check now and then. (Not on the ladder: it is the first time from the cue.)
       const s = getState(item.id);
-      c.mustType = !t.ladder && needsProof(s);
+      c.mustType = !t.ladder && provable(t) && needsProof(s, dayNow());
       c.spot = !t.ladder && spotCheck(s, S.goes, item.id);
     }
     if (t.queue === 'beat' && t.kind === 'item' && !S.shuffleSaid) {
@@ -474,10 +480,10 @@ export function createSession({ model, index, getPlan, getState, settings, scope
       // Typed right from the cue alone, but more than twice as slowly a word as usual once under way.
       const perWord = typedPerWord(result, item);
       const slow = result.pass && !help && !primed && !relearn && !result.slip && typing != null && perWord != null && perWord > SLOW * typing;
-      const state =
-        help && result.pass
-          ? applyHelp(prev, { day })
-          : applyResult(prev, { pass: result.pass, day, time, mode: result.mode, k, pretest, relearn, primed, slow, proof: earnsProof({ pass: result.pass, mode: result.mode, help, ladder: !!t.ladder }) });
+      // A line put on show by an answer that was undone cannot prove itself straight after.
+      const fair = provable(t) && !knownToday(prev, day) && !(S.shown && S.shown[id]);
+      const proof = fair && earnsProof({ pass: result.pass, mode: result.mode, help, ladder: !!t.ladder, slip: !!result.slip });
+      const state = help && result.pass ? applyHelp(prev, { day }) : applyResult(prev, { pass: result.pass, day, time, mode: result.mode, k, pretest, relearn, primed, slow, proof });
       const event = { time, day, id, pass: result.pass, mode: result.mode, queue, misses: result.misses.length, speakerWrong: !!result.speakerWrong, relearn, prev };
       if (help) event.help = true;
       if (primed) event.primed = true;
@@ -579,9 +585,11 @@ export function createSession({ model, index, getPlan, getState, settings, scope
       return this.advance();
     },
 
-    // Undo: the app restores the item state and removes the event, then calls this.
-    restore(snapshot) {
+    // Undo: the app restores the item state and removes the event, then calls this. shown: the line,
+    // when the answer undone had put it on show and it could still be proved.
+    restore(snapshot, shown = null) {
       S = structuredClone(snapshot);
+      if (shown) (S.shown ||= {})[shown] = true;
       card = S.task ? cardFor(S.task) : null;
       return card;
     },

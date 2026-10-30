@@ -13,7 +13,7 @@
 // lighter and a missed day spreads out quietly; the curve is fitted to his own results; times come
 // from his own pace; once today's plan is done, "keep going" work is ready.
 import { addDays, dayEnd, daysBetween, formatDay, weekday } from './dates.js';
-import { category, isWordPerfect, needsTeaching } from './state.js';
+import { category, isWordPerfect, knownToday, needsTeaching } from './state.js';
 import { fnv1a, spineItemIds } from './items.js';
 import { HOUR, OPENING_TARGET, TARGET, fitFactor, readyAt, recallNow, retrievability } from './memory.js';
 
@@ -89,16 +89,21 @@ export const maxDays = (phase) => (phase === 'learning' || phase === 'show' ? 3 
 const targetOf = (openings, id) => (openings.has(id) ? OPENING_TARGET : TARGET);
 
 // The learned lines ready to test now, each with its chance of recall (0 for a miss not yet relearned).
+// ready.forced: those ready only because of the date, which the curve does not say are going. A line
+// typed right in Already know some? today waits for another day.
 export function readyLines({ model, getState, now, today, k, phase, proofs = false }) {
   const openings = new Set(spineItemIds(model));
   const cap = maxDays(phase);
   const ready = new Map();
+  ready.forced = new Set();
   for (const it of model.items) {
     const s = getState(it.id);
-    if (s.status !== 'review') continue;
+    if (s.status !== 'review' || knownToday(s, today)) continue;
     const r = s.lastResult === 'miss' ? 0 : recallNow(s, now, k) ?? 0;
     const stale = cap === 0 ? s.lastDay < today : daysBetween(s.lastDay, today) >= cap;
-    if (r <= targetOf(openings, it.id) || stale || (proofs && !s.proved)) ready.set(it.id, r);
+    const going = r <= targetOf(openings, it.id) || (proofs && !s.proved);
+    if (going || stale) ready.set(it.id, r);
+    if (!going && stale) ready.forced.add(it.id);
   }
   return ready;
 }
