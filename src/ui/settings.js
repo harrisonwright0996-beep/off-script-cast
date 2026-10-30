@@ -2,6 +2,7 @@
 // is saved at once.
 import { h, clear, screen, button, announce, focusHeading, plural, pickFile } from './dom.js';
 import { canPush, disable, enable } from '../cast/reminders.js';
+import { mustInstall, thisDevice } from '../device.js';
 import { makeBackup, readBackup } from '../backup.js';
 import { withDefaults } from '../settings.js';
 import { dayKey, formatDay } from '../dates.js';
@@ -23,6 +24,19 @@ const BACKUP_PROBLEMS = {
   'not-backup': 'That file is not an Off Script backup.',
   newer: 'That backup is from a newer version of Off Script. Update the app first.',
 };
+
+const FORGET_WAIT = 3000; // no signal must not hold up removing everything
+
+// Everything off this phone. Reminders go first, so the worker forgets the subscription.
+export async function wipePhone(ctx) {
+  await Promise.race([disable(ctx).catch(() => {}), new Promise((done) => setTimeout(done, FORGET_WAIT))]);
+  await ctx.store.removeEverything();
+  try {
+    localStorage.clear();
+  } catch {
+    // nothing stored there
+  }
+}
 
 const when = (ms) => {
   const d = new Date(ms);
@@ -127,6 +141,7 @@ export function showSettings(ctx) {
           if (b.settings) await ctx.saveSettings(withDefaults(b.settings));
           ctx.states = new Map(b.states.map((st) => [st.id, st]));
           ctx.eventsFrom = null;
+          await ctx.settleSeen();
           announce('Backup restored');
           ctx.go('today');
         }, { class: 'btn primary' }),
@@ -145,12 +160,7 @@ export function showSettings(ctx) {
       [
         button('Keep everything', () => ctx.go('settings'), { class: 'btn primary' }),
         button('Remove everything', async () => {
-          await ctx.store.removeEverything();
-          try {
-            localStorage.clear();
-          } catch {
-            // nothing stored there
-          }
+          await wipePhone(ctx);
           location.reload();
         }),
       ],
@@ -181,7 +191,9 @@ export function showSettings(ctx) {
     screen({
       title: 'Settings',
       back: () => ctx.go('today'),
+      backLabel: 'Your lines',
       body: [
+        mustInstall(thisDevice()) ? h('div', { class: 'stack' }, button('Install Off Script', () => ctx.go('install'))) : null,
         h('h2', {}, 'Look'),
         h(
           'div',

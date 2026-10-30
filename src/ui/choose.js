@@ -9,8 +9,8 @@ import { linesLeft } from '../session.js';
 import { PRACTICE } from './sprint.js';
 
 const WHICH = [
-  ['learning', 'Lines still being learned', 'Started, but not yet solid, or missed last time.'],
-  ['learned', 'Everything learned so far', 'Every line learned so far, as a full check.'],
+  ['learning', 'Lines still being learnt', 'Started, but not yet solid, or missed last time.'],
+  ['learned', 'Everything learnt so far', 'Every line learnt so far, as a full check.'],
   ['all', 'Every line', 'Every line, started or not.'],
 ];
 const RUN_WHICH = WHICH.filter(([v]) => v !== 'learning');
@@ -88,5 +88,5 @@ export async function showChoose(ctx, { run = false } = {}) {
   const intro = run ? h('p', {}, 'In script order, scene by scene. A miss shows the line and carries on; it comes back after that run.') : null;
   const body = [carryOn, intro, field('scene', 'Where', where), field('which', 'Which lines', which), field('help', 'How much help', HELP), summary];
   update();
-  ctx.root.append(screen({ title: run ? 'Run through' : 'Choose what to practise', back: () => ctx.go('today'), body, footer: [begin] }));
+  ctx.root.append(screen({ title: run ? 'Run through' : 'Choose what to practise', back: () => ctx.go('today'), backLabel: 'Your lines', body, footer: [begin] }));
 }

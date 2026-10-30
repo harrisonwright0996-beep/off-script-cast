@@ -7,7 +7,10 @@ import { cleanCode, deriveKeys, seal, unseal, tokenHash } from '../src/cast/pack
 import { crossed, earnsProof, fadingCount, isLearnt, learntPercent, needsProof, sceneLights, spotCheck } from '../src/cast/proof.js';
 import { newState, applyKnown, applyResult } from '../src/state.js';
 import { detect, mustInstall } from '../src/device.js';
-import { nextNudge, nudgeText } from '../src/cast/reminders.js';
+import { nextNudge, nudgeText, nudgeWhy } from '../src/cast/reminders.js';
+import { SCIENCE } from '../src/cast/science.js';
+import { ENDS } from '../src/cast/config.js';
+import { isFourWords, tidyCode } from '../src/ui/unlock.js';
 import { memberPack } from '../src/cast/build.js';
 import { unzipSync, strFromU8 } from '../vendor/fflate.js';
 import { makeCode } from '../tools/make-packs.mjs';
@@ -163,6 +166,45 @@ test('every device gets the right steps', () => {
   assert.equal(mustInstall('standalone'), false);
 });
 
+test('an app showing the page inside itself is told apart from a browser, on iPhone and Android', () => {
+  const webkit = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko)';
+  const android = 'Mozilla/5.0 (Linux; Android 14; 2201116SG) AppleWebKit/537.36 (KHTML, like Gecko)';
+  const table = [
+    [`${webkit} Version/18.5 Mobile/15E148 Safari/604.1`, 'ios-safari'],
+    [`${webkit} Mobile/15E148`, 'in-app'], // no Safari/: an app we have not named
+    [`${webkit} Mobile/15E148 Snapchat/13.0`, 'in-app'],
+    [`${webkit} CriOS/130.0.0.0 Mobile/15E148 Safari/604.1`, 'ios-other'],
+    [`${webkit} FxiOS/130.0 Mobile/15E148 Safari/605.1.15`, 'ios-other'],
+    [`${webkit} Version/18.5 EdgiOS/130.0.0.0 Mobile/15E148 Safari/604.1`, 'ios-other'],
+    [`${webkit} Version/18.5 Mobile/15E148 DuckDuckGo/7 Safari/605.1.15`, 'ios-other'],
+    [`${android} Chrome/130.0.0.0 Mobile Safari/537.36`, 'android-chrome'],
+    [`${android} Version/4.0 Chrome/120.0.0.0 Mobile Safari/537.36 XiaoMi/MiuiBrowser/14.7.0`, 'android-other'],
+    [`${android} Chrome/120.0.0.0 HuaweiBrowser/14.0.0.320 Mobile Safari/537.36`, 'android-other'],
+    [`${android} SamsungBrowser/26.0 Chrome/122.0.0.0 Mobile Safari/537.36`, 'android-other'],
+    [`${android} Chrome/130.0.0.0 Mobile Safari/537.36 EdgA/130.0.0.0`, 'android-other'],
+    [`${android} Chrome/130.0.0.0 Mobile Safari/537.36 OPR/85.0.0.0`, 'android-other'],
+    [`${android} HeyTapBrowser/45.10 Chrome/120.0.0.0 Mobile Safari/537.36`, 'android-other'],
+    ['Mozilla/5.0 (Android 14; Mobile; rv:131.0) Gecko/131.0 Firefox/131.0', 'android-other'],
+    [`Mozilla/5.0 (Linux; Android 14; 2201116SG; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0 Mobile Safari/537.36`, 'in-app'],
+  ];
+  for (const [ua, kind] of table) assert.equal(detect({ ua }), kind, ua);
+});
+
+test('a code pasted from a message is tidied, and anything but four words is caught', () => {
+  assert.equal(tidyCode('  Code: "Otter lamp river nine"  '), 'Otter lamp river nine');
+  assert.equal(tidyCode('"Code: otter lamp river nine"'), 'otter lamp river nine');
+  assert.equal(tidyCode('code:otter lamp river nine'), 'otter lamp river nine');
+  assert.equal(tidyCode('“otter lamp river nine”'), 'otter lamp river nine');
+  assert.equal(tidyCode('otter lamp river nine'), 'otter lamp river nine');
+  for (const code of ['otter lamp river nine', 'otter-lamp-river-nine', 'Code: otter lamp river nine', "'OTTER  lamp river nine.'"]) assert.equal(isFourWords(code), true, code);
+  for (const code of ['', 'otter', 'otter lamp river', 'otter lamp river nine ten', 'Code:']) assert.equal(isFourWords(code), false, code);
+});
+
+test('the end of the show is a real day, in the form today is compared with', () => {
+  assert.match(ENDS, /^\d{4}-\d{2}-\d{2}$/);
+  assert.ok('2027-01-31' <= ENDS && '2027-02-01' > ENDS);
+});
+
 test('a line already known is learnt and proved at once, and comes back as a check', () => {
   const s = applyKnown(newState('x'), { day: '2026-11-02', time: 1000 });
   assert.equal(isLearnt(s), true);
@@ -182,10 +224,30 @@ test('the next nudge is never within 20 hours, never past a week, and falls in t
 });
 
 test('a nudge says keep them once every line is learnt, and never names a person or a line', () => {
-  assert.match(nudgeText({ percent: 100, turn: 0 }).body, /Keep them, or they fade/);
+  assert.match(nudgeText({ percent: 100, turn: 0 }).body, /keeps them fresh/);
   assert.notEqual(nudgeText({ percent: 40, turn: 0 }).body, nudgeText({ percent: 40, turn: 1 }).body);
   const body = [0, 1, 2, 3].flatMap((turn) => [40, 100].map((percent) => nudgeText({ percent, turn }).body)).join(' ');
   assert.ok(!/\d+ ?%|deadline|by \w+day/i.test(body));
+});
+
+test('the words fit why the nudge comes: new lines with nothing fading never say lines are slipping', () => {
+  const now = new Date(2026, 10, 2, 18, 0).getTime();
+  const app = fakeApp();
+  const args = () => ({ model: app.model, getState: app.getState, now });
+  assert.equal(nudgeWhy(args()), 'new'); // nothing learnt yet, so nothing can fade
+  for (const turn of [0, 1, 2, 3]) assert.equal(nudgeText({ percent: 0, turn, why: 'new' }).body, 'Your lines are ready when you are. Fancy a quick round?');
+  learn(app, app.model.items.map((it) => it.id), { proved: true });
+  assert.equal(nudgeWhy(args()), 'fading'); // every line learnt: only fading is left to bring them back
+  assert.match(nudgeText({ percent: 100, turn: 0, why: 'fading' }).body, /keeps them fresh/);
+  const fading = [0, 1, 2, 3].map((turn) => nudgeText({ percent: 40, turn, why: 'fading' }).body);
+  assert.ok(fading.includes('One quick round now does more than a long one later.'));
+  assert.ok(fading.includes('Lines you have started are slipping a little. Catch them now and they last longer.'));
+});
+
+test('the notes on how it works make no promise and use no dashes', () => {
+  assert.ok(SCIENCE.includes('Hard does not mean it is going badly. Digging for a line, then checking it, helps it stick.'));
+  assert.ok(SCIENCE.some((s) => s.endsWith('not from your last line. On stage, the cue is all you get.')));
+  assert.ok(!SCIENCE.join(' ').includes('\u2014'));
 });
 
 test('a pack opens with only that member, and every clip its manifest names', () => {

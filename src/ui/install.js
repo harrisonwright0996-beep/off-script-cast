@@ -72,21 +72,25 @@ export function showInstall(ctx) {
     try {
       await navigator.clipboard.writeText(location.href.split('#')[0]);
       announce('Link copied');
-      copied.textContent = 'Copied. Now paste it into your browser.';
+      said.textContent = 'Copied. Now paste it into your browser.';
     } catch {
-      copied.textContent = location.href.split('#')[0];
+      said.textContent = location.href.split('#')[0];
     }
   };
-  const copied = h('p', { class: 'help', role: 'status' });
+  const said = h('p', { class: 'help', role: 'status' });
   const all = h('div', { class: 'all-steps' });
   const others = button('Not your device? See all the steps', () => {
     others.remove();
-    for (const [key, x] of Object.entries(STEPS)) if (key !== kind) all.append(h('h2', {}, x.name), h('p', {}, x.lead), list(x.steps));
+    for (const [key, x] of Object.entries(STEPS)) if (key !== kind) all.append(h('h2', { tabindex: '-1' }, x.name), h('p', {}, x.lead), list(x.steps));
+    all.querySelector('h2').focus(); // the button that had focus has gone
   }, { class: 'btn link' });
   const install =
     kind === 'android-chrome'
       ? button('Install Off Script', async () => {
-          if (!offer) return announce('Follow the steps above');
+          if (!offer) {
+            said.textContent = 'Your phone has not offered to install yet. Follow the steps above.';
+            return;
+          }
           offer.prompt();
           await offer.userChoice;
           offer = null;
@@ -95,8 +99,8 @@ export function showInstall(ctx) {
   ctx.root.append(
     screen({
       title: 'Install Off Script',
-      body: [h('p', { class: 'lead' }, info.lead), list(info.steps), info.copy ? button('Copy link', copy, { class: 'btn' }) : null, copied, others, all],
-      footer: [install, button('Carry on without installing', carryOn, { class: 'btn link' })].filter(Boolean),
+      body: [h('p', { class: 'lead' }, info.lead), list(info.steps), info.copy ? button('Copy link', copy, { class: 'btn' }) : null, said, others, all],
+      footer: [install, h('p', { class: 'help' }, 'If you carry on here and install later, you will start again.'), button('Carry on without installing', carryOn, { class: 'btn link' })].filter(Boolean),
     }),
   );
 }
