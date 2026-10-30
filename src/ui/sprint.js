@@ -434,7 +434,9 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     // slip counted right: going back would hand him a card he could now type word for word.
     const shownByKeys = result.misses.length > 0 && result.mode === 'type';
     slipRec = shownByKeys ? rec : null;
-    if (shownByKeys || result.slip) undo.length = 0;
+    // A miss takes a line out of the %, and only typing brings it back, so Undo cannot.
+    const costProof = !result.pass && rec.event.prev.proved;
+    if (shownByKeys || result.slip || costProof) undo.length = 0;
     else undo.push(rec);
     await saveSprint();
     const text = rec.help && result.pass ? RIGHT_WITH[c.step] : result.slip ? 'Counted right: a slip of the finger' : describeResult(result, c.item.tokens, c.item.speaker);
@@ -531,7 +533,7 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
   // What the round gained, then `text`. With nothing to say, `text` is the headline.
   function headline(text) {
     const onWay = [...practised].filter((id) => !isLearnt(ctx.getState(id))).length;
-    const gain = gainLine(startPercent, learntPercent(ctx.model, ctx.getState), onWay);
+    const gain = gainLine(startPercent, learntPercent(ctx.model, ctx.getState), onWay) || (practised.size ? 'That keeps your lines fresh.' : null);
     return [gain ? h('p', { class: 'lead' }, gain) : null, h('p', { class: gain ? null : 'lead' }, text)];
   }
 
@@ -548,15 +550,16 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     session.finish();
     saveSprint();
     const st = done();
+    const said = st.answered ? statsLine(st) : 'Nothing left in this round.';
     if (short) {
-      return plain('Keep going?', [headline(statsLine(st)), h('p', {}, 'Starting is the hard part, and it is done.')], [
+      return plain('Keep going?', [headline(said), h('p', {}, 'Starting is the hard part, and it is done.')], [
         button('Another round', act(() => ctx.go('sprint')), { class: 'btn primary' }),
         button('Stop for now', act(() => ctx.go('today'))),
       ]);
     }
     const left = chosen ? linesLeft(session.state) : 0;
     science().then((note) =>
-      plain('Round done', [headline(statsLine(st)), left ? h('p', {}, `${plural(left, 'line')} of this ${chosen.run ? 'run through' : 'practice'} still to go.`) : null, note], [
+      plain('Round done', [headline(said), left ? h('p', {}, `${plural(left, 'line')} of this ${chosen.run ? 'run through' : 'practice'} still to go.`) : null, note], [
         left
           ? button('Carry on', act(() => ctx.go('sprint', { practice: 'resume' })), { class: 'btn primary' })
           : button('Another round', act(() => ctx.go('sprint')), { class: 'btn primary' }),

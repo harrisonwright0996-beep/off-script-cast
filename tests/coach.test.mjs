@@ -347,3 +347,11 @@ test('a cue that leads to more than one line: a member\'s pack has the lines bef
   assert.equal(texts.get(`l-${comingAgain.id}`), 'Are you coming?', 'the phone can read them too');
   assert.equal(texts.get(`c-${comingAgain.id}`), 'Fine then.');
 });
+
+test('a walk kept from days ago changes nothing on a line answered since', () => {
+  const later = { ...newState('a'), status: 'review', proved: true, lastTime: 5000 };
+  const fresh = newState('b');
+  const states = { a: later, b: fresh };
+  const records = walkRecords([{ id: 'a', pass: false, at: 1, queue: 'run' }, { id: 'b', pass: true, at: 2, queue: 'run' }], { start: 1000, getState: (id) => states[id] });
+  assert.deepEqual(records.map((r) => r.event.id), ['b']);
+});

@@ -130,7 +130,7 @@ export function showSettings(ctx) {
       [
         h('p', { class: 'lead' }, `Backup from ${when(b.made)}: progress for ${plural(b.kept, 'line')}.`),
         b.dropped ? h('p', {}, `${plural(b.dropped, 'line')} in the backup are not in this script, so they are left out.`) : null,
-        h('p', {}, 'It replaces the progress on this phone.'),
+        h('p', {}, 'It replaces the progress on this phone. Your % starts again from 0, and each line comes back to it when you next type it right.'),
       ],
       [
         button('Restore', async () => {

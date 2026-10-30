@@ -127,3 +127,14 @@ test('files that are not backups are refused plainly', () => {
   assert.equal(code('{"app":"off-script-cast","made":1,"states":[],"events":[]}'), 'not-backup', 'no version');
   assert.equal(code('{"app":"off-script-cast","version":1,"states":[],"events":[]}'), 'not-backup', 'no date');
 });
+
+test('a date no clock can hold, or a broken list of missed words, cannot get in', () => {
+  const app = fakeApp();
+  const ids = app.model.scenes[1].itemIds;
+  learn(app, ids.slice(0, 1), { stability: 5 });
+  const data = JSON.parse(backupOf(app, app.states.values()));
+  assert.throws(() => readBackup(JSON.stringify({ ...data, made: 1e300 }), app.model), BackupError);
+  const event = { id: ids[0], time: 1, day: '2026-10-26', pass: false, mode: 'type', prev: null };
+  data.events = [{ ...event, missed: 3 }, { ...event, ms: 'soon' }, { ...event, time: 1e300 }, { ...event, missed: [1, 2], ms: 900 }];
+  assert.deepEqual(readBackup(JSON.stringify(data), app.model).events.map((e) => e.ms), [900]);
+});

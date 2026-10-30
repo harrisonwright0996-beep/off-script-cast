@@ -270,3 +270,18 @@ test('screens to look at, on the invented play', async ({ page }, info) => {
   await page.getByRole('button', { name: 'Walk' }).click();
   await shot('6-walk');
 });
+
+test('Starting a scene again keeps a saved walk that does not touch it, and drops one that does', async ({ page }) => {
+  await enrol(page);
+  const kept = await page.evaluate(async () => {
+    const o = window.offScript;
+    const [a, b] = o.model.items.map((it) => it.id);
+    const draft = { trials: [{ id: a }] };
+    await o.store.set('walkDraft', draft);
+    await o.store.clearProgress([b]);
+    const after = !!(await o.store.get('walkDraft'));
+    await o.store.clearProgress([a]);
+    return [after, !!(await o.store.get('walkDraft'))];
+  });
+  expect(kept).toEqual([true, false]);
+});

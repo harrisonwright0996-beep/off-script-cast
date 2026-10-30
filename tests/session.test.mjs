@@ -992,3 +992,15 @@ test('a line said and undone cannot then be typed for proof, but a later sprint 
   assert.equal(app.getState(id).passes, 1);
   assert.equal(app.getState(id).proved, false);
 });
+
+test('a line an undone answer put on show is not sold as counting: it asks for no typing that cannot count', () => {
+  const app = fakeApp({ settings: PROOF, today: '2026-10-27' });
+  const id = app.model.items[0].id;
+  app.states.set(id, applyKnown(app.getState(id), { day: '2026-10-26', time: app.clock - 86400000 }));
+  const s = start(app, { custom: { itemIds: [id], help: 'none' } });
+  const snapshot = s.save();
+  s.advance();
+  const c = s.restore(snapshot, id);
+  assert.notEqual(c && c.mustType, true);
+  assert.notEqual(s.advance().mustType, true);
+});

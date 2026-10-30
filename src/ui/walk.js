@@ -147,6 +147,13 @@ export function showWalk(ctx) {
   async function audioWalk(tape, plan, about) {
     const names = [...new Set(tape.steps.filter((s) => s.clip).map((s) => s.clip)), ctx.manifest.silence.file];
     const clips = await ctx.store.getClips(names);
+    if (names.some((n) => !clips.has(n))) {
+      // New audio is going in at this moment.
+      return page('Nearly ready', [h('p', { class: 'lead' }, 'Your lines are being updated. Give it a moment, then try again.')], [
+        button('Try again', settled(() => build(length)), { class: 'btn primary' }),
+        button('Back to my lines', settled(() => ctx.go('today'))),
+      ]);
+    }
     const blob = tapeBlob(tape.steps, clips, clips.get(ctx.manifest.silence.file));
     const marked = new Set();
     const times = clock(tape);
@@ -356,7 +363,7 @@ export function showWalk(ctx) {
       ]);
     }
     // Kept until saved or let go: a phone can clear the page once the tape has ended.
-    const kept = ctx.store.set(DRAFT, { hash: ctx.model.hash, trials: tape.trials, marked, stoppedAt, started, heard: times.heard, k: plan.k, length }).catch(() => {});
+    const kept = ctx.store.set(DRAFT, { trials: tape.trials, marked, stoppedAt, started, heard: times.heard, k: plan.k, length }).catch(() => {});
     const list = h(
       'ul',
       { class: 'review-list' },
@@ -423,7 +430,7 @@ export function showWalk(ctx) {
   async function restore() {
     const nav = ctx.nav;
     const draft = await ctx.store.get(DRAFT);
-    if (ctx.nav !== nav || length !== null || !draft || draft.hash !== ctx.model.hash || !draft.trials.every((tr) => ctx.index.byId.has(tr.id))) return;
+    if (ctx.nav !== nav || length !== null || !draft || !draft.trials.every((tr) => ctx.index.byId.has(tr.id))) return;
     length = draft.length;
     review({ trials: draft.trials }, { k: draft.k }, draft.marked, draft.stoppedAt, draft.started, { heard: draft.heard }, true);
   }

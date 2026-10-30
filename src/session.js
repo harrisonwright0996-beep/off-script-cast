@@ -395,7 +395,8 @@ export function createSession({ model, index, getPlan, getState, settings, scope
       // Saying a line is on trust: the go that would count it as learned is typed, and so is a spot
       // check now and then. (Not on the ladder: it is the first time from the cue.)
       const s = getState(item.id);
-      c.mustType = !t.ladder && provable(t) && needsProof(s, dayNow());
+      // (Nor when an undone answer put the line on show: it cannot count this round.)
+      c.mustType = !t.ladder && provable(t) && needsProof(s, dayNow()) && !(S.shown && S.shown[item.id]);
       c.spot = !t.ladder && spotCheck(s, S.goes, item.id);
     }
     if (t.queue === 'beat' && t.kind === 'item' && !S.shuffleSaid) {

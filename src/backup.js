@@ -33,7 +33,7 @@ export function makeBackup({ model, states, events, settings, member = null, now
 }
 
 const isCount = (n) => Number.isInteger(n) && n >= 0;
-const isTime = (n) => Number.isFinite(n) && n >= 0;
+const isTime = (n) => Number.isFinite(n) && n >= 0 && n <= 8.64e15; // the last moment a Date can hold
 const isDay = (d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d);
 const isDays = (list) => Array.isArray(list) && list.every(isDay);
 const isHours = (n) => Number.isFinite(n) && n > 0;
@@ -57,7 +57,9 @@ const STATE_KEYS = Object.keys(newState(''));
 const cleanState = (s) => ({ ...newState(s.id), ...Object.fromEntries(STATE_KEYS.filter((k) => s[k] !== undefined).map((k) => [k, s[k]])), proved: false });
 
 const goodPrev = (p) => p == null || (typeof p === 'object' && STATUSES.includes(p.status) && (p.stability == null || isHours(p.stability)) && (p.lastTime == null || isTime(p.lastTime)));
-const goodEvent = (e) => !!e && isTime(e.time) && isDay(e.day) && typeof e.pass === 'boolean' && MODES.includes(e.mode) && goodPrev(e.prev);
+const orNull = (test) => (v) => v == null || test(v);
+const goodWords = (list) => Array.isArray(list) && list.every(isCount);
+const goodEvent = (e) => !!e && isTime(e.time) && isDay(e.day) && typeof e.pass === 'boolean' && MODES.includes(e.mode) && goodPrev(e.prev) && orNull(goodWords)(e.missed) && [e.misses, e.ms, e.firstMs, e.active].every(orNull(isTime));
 
 // Settings a file may bring back: only those the app knows, of the kind it expects, and in range.
 // Whether lines need typing to count (proofs) is never one of them.

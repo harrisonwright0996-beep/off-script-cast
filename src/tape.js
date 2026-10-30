@@ -374,15 +374,17 @@ export function walkResults(tape, rows, marked) {
 // whole walk counts as practice. Rounded on the running total, so that however long the walk, they
 // add up to the tape time. A walk proves nothing: a pass on a line not yet learned and not yet typed
 // right is practice, and leaves the line as far along as it was, so a round still teaches it. A miss,
-// or a pass on a line already learned or typed, changes it as usual.
+// or a pass on a line already learned or typed, changes it as usual. A walk kept from days ago changes
+// nothing on a line answered since: what came later is the truer picture.
 export function walkRecords(results, { start, getState, k = 1 }) {
   const states = new Map();
   let prevAt = 0;
   const tenths = (x) => Math.round(x * 10) / 10;
-  return results.map((r) => {
+  return results.flatMap((r) => {
     const time = start + r.at * 1000;
     const day = dayKey(new Date(time));
     const prev = states.get(r.id) || getState(r.id);
+    if (prev.lastTime != null && prev.lastTime > time) return [];
     const practice = r.pass && prev.status !== 'review' && !prev.proved;
     const state = practice ? { ...prev, status: 'learning', firstDay: prev.firstDay ?? day, lastDay: day, lastTime: time, lastMode: 'walk' } : applyResult(prev, { pass: r.pass, day, time, mode: 'walk', k });
     states.set(r.id, state);
@@ -391,6 +393,6 @@ export function walkRecords(results, { start, getState, k = 1 }) {
       event.active = tenths(tenths(r.tapeAt) - prevAt);
       prevAt = tenths(r.tapeAt);
     }
-    return { event, state };
+    return [{ event, state }];
   });
 }

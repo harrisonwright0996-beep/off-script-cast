@@ -8,7 +8,7 @@ export const SCIENCE = [
   'Saying a line aloud helps it stick better than going over it in your head.',
   'Lines come back out of order so that you learn them from the cue, not from your last line. On stage, the cue is all you get.',
   'Walks help because you say your lines from memory, with no script to peek at. Moving in ways that fit the words helps too.',
-  'Knowing a line today does not mean you will know it next week. Memories fade unless you use them.',
+  'Knowing a line now does not mean you will still know it later. Memories fade unless you use them.',
 ];
 
 export const scienceNote = (n) => SCIENCE[n % SCIENCE.length];
