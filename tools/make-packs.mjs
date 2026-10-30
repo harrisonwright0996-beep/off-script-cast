@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Makes the sealed packs on the laptop: one for each cast member, and the cast list. Everything
 // private comes in by argument and goes out to a folder outside this repository. It prints counts
-// only, never a name, a line or the code. Audio comes from an existing audio pack; only the coach
-// and the stage directions are spoken here. Needs say and LAME.
+// only, never a name, a line or the code. Audio comes from an existing audio pack; only the coach,
+// the stage directions and roles played as someone else are spoken here. Needs say and LAME.
 //
 //   node tools/make-packs.mjs --script <script.docx> --cast <cast.json> --audio <audio pack.zip> --out <folder>
 //
@@ -21,7 +21,7 @@ import { buildModel, displayRole, fnv1a } from '../src/items.js';
 import { readAudioPack } from '../src/audiopack.js';
 import { parseMp3 } from '../src/mp3.js';
 import { COACH } from '../src/coach.js';
-import { noteKey } from '../src/tape.js';
+import { noteKey, spokenRole } from '../src/tape.js';
 import { castList, memberPack, selfOf } from '../src/cast/build.js';
 import { deriveKeys, seal, tokenHash } from '../src/cast/pack.js';
 import { WORDS } from './words.mjs';
@@ -30,6 +30,9 @@ const run = promisify(execFile);
 const REPO = realpathSync(fileURLToPath(new URL('..', import.meta.url)));
 const VOICE = 'Daniel';
 const spoken = (note) => note.replace(/[[\]]/g, '').trim();
+
+// The roles whose clip in the audio pack leaves out who they are playing.
+export const asRoles = (model) => [...new Set(model.items.map((it) => it.speaker))].filter((label) => spokenRole(label) !== label);
 
 export function makeCode(pick = randomInt) {
   return Array.from({ length: 4 }, () => WORDS[pick(WORDS.length)]).join(' ');
@@ -71,6 +74,7 @@ export async function main(argv) {
   const work = await mkdtemp(join(tmpdir(), 'off-script-packs-'));
   const coach = {};
   const notes = {};
+  const roles = asRoles(model);
   try {
     for (const [key, text] of Object.entries(COACH)) {
       const mp3 = await say(text, work, `coach-${key}`);
@@ -87,11 +91,19 @@ export async function main(argv) {
       audio.clips.set(file, mp3.bytes);
       notes[key] = { file, duration: mp3.duration };
     }
+    for (const label of roles) {
+      const key = fnv1a(label);
+      const mp3 = await say(spokenRole(label), work, `role-${key}`);
+      const file = `r-${key}.mp3`;
+      audio.clips.set(file, mp3.bytes);
+      audio.manifest.speakers[label] = { file, duration: mp3.duration };
+    }
   } finally {
     await rm(work, { recursive: true, force: true });
   }
 
-  const version = fnv1a(`${model.hash}|${cast.members.map((m) => m.ids.join()).join('|')}|${Object.values(coach).length}`);
+  // Phones fetch their pack again when this changes, so it covers what is spoken here.
+  const version = fnv1a(`${model.hash}|${cast.members.map((m) => m.ids.join()).join('|')}|${JSON.stringify(COACH)}|${roles.length}`);
   const list = [];
   let total = 0;
   for (const member of cast.members) {
@@ -106,7 +118,7 @@ export async function main(argv) {
   }
   list.sort((a, b) => a.name.localeCompare(b.name, 'en-GB'));
   await writeFile(join(out, 'files', 'cast'), await seal(keys.key, castList(list, version)));
-  console.log(`${list.length} packs, ${(total / 1e6).toFixed(1)} MB in all, ${Object.keys(notes).length} stage directions spoken. Code and files are in the --out folder.`);
+  console.log(`${list.length} packs, ${(total / 1e6).toFixed(1)} MB in all, ${Object.keys(notes).length} stage directions and ${roles.length} roles spoken. Code and files are in the --out folder.`);
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {

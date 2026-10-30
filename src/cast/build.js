@@ -18,6 +18,18 @@ export function memberPack(model, member, audio, { coach = {}, notes = {} } = {}
   for (const it of sub.items) if (it.askSpeaker && m.speakers[it.speaker]) speakers[it.speaker] = m.speakers[it.speaker];
   const headings = {};
   for (const it of sub.items) if (it.cue.speaker === null && m.headings[it.scene]) headings[it.scene] = m.headings[it.scene];
+  // A longer cue (uniqueCues) plays the lines before a line, often someone else's: their clips come
+  // too, and what leads into the first of them.
+  for (const it of sub.items) {
+    const cue = sub.cues[it.id];
+    if (!cue) continue;
+    cue.lead.forEach((id, i) => {
+      if (!m.items[id]) return;
+      items[id] ||= { line: m.items[id].line, cue: null };
+      if (i === 0) items[id] = { ...items[id], cue: m.items[id].cue };
+    });
+    if (cue.lines[0].speaker === null && m.headings[it.scene]) headings[it.scene] = m.headings[it.scene];
+  }
   const ownNotes = new Set(sub.items.flatMap((it) => it.cue.notes.map(noteKey)));
   const usedNotes = Object.fromEntries(Object.entries(notes).filter(([k]) => ownNotes.has(k)));
   const manifest = { version: PACK_VERSION, scriptHash: sub.hash, sampleRate: m.sampleRate, bitrate: m.bitrate, made: m.made, silence: m.silence, items, speakers, headings, coach, notes: usedNotes };

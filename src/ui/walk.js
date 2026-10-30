@@ -4,14 +4,15 @@
 // the screen kept on, and two big buttons do the marking. Afterwards he checks the list, and the
 // results are saved at the moments they were heard.
 import { h, clear, screen, button, announce, focusHeading, plural, settled } from './dom.js';
-import { buildWalk, noteKey, trialAt, partAt, reviewRows, walkResults, walkRecords } from '../tape.js';
+import { buildWalk, markTrial, markedLines, noteKey, partAt, replayPoint, resumePoint, reviewRows, spokenRole, walkResults, walkRecords } from '../tape.js';
 import { sync } from '../cast/reminders.js';
 import { tapeBlob, createPlayer, keepScreenOn } from '../player.js';
 import { canSpeak, speak, stopSpeaking } from '../tts.js';
 import { tokenize, keyedCount, joinTokens } from '../tokens.js';
-import { COACH } from '../coach.js';
+import { COACH_SPEECH } from '../coach.js';
 
 const LENGTHS = [5, 10, 15, 20, 30];
+const DRAFT = 'walkDraft'; // what a walk heard, until it is saved or let go
 
 // A stage direction as it is read aloud, without its brackets.
 export const spokenNote = (n) => n.replace(/[[\]]/g, '');
@@ -26,10 +27,10 @@ export function speechManifest(model) {
     items[it.id] = { line: clip(`line:${it.id}`, it.text), cue: it.cue.speaker === null ? null : clip(`cue:${it.id}`, it.cue.text) };
   }
   const speakers = {};
-  for (const it of model.items) speakers[it.speaker] ||= clip(`speaker:${it.speaker}`, it.speaker);
+  for (const it of model.items) speakers[it.speaker] ||= clip(`speaker:${it.speaker}`, spokenRole(it.speaker));
   const headings = {};
   model.scenes.forEach((sc) => (headings[sc.index] = clip(`heading:${sc.index}`, sc.heading)));
-  const coach = Object.fromEntries(Object.entries(COACH).map(([key, text]) => [key, clip(`coach:${key}`, text)]));
+  const coach = Object.fromEntries(Object.entries(COACH_SPEECH).map(([key, text]) => [key, clip(`coach:${key}`, text)]));
   const notes = {};
   for (const it of model.items) for (const n of it.cue.notes) notes[noteKey(n)] = clip(`note:${noteKey(n)}`, spokenNote(n));
   return { version: 1, scriptHash: model.hash, silence: { file: 'silence', duration: 0.25 }, items, speakers, headings, coach, notes };
@@ -44,9 +45,18 @@ export function clipTexts(manifest, model) {
     texts.set(m.line.file, it.text);
     if (m.cue) texts.set(m.cue.file, it.cue.text);
   }
-  for (const [name, ref] of Object.entries(manifest.speakers)) texts.set(ref.file, name);
+  // The lines a longer cue plays are in the pack, but often not in the model.
+  for (const cue of Object.values(model.cues || {})) {
+    cue.lead.forEach((id, i) => {
+      const m = manifest.items[id];
+      if (!m) return;
+      texts.set(m.line.file, cue.lines[i + 1].text);
+      if (i === 0 && m.cue) texts.set(m.cue.file, cue.lines[0].text);
+    });
+  }
+  for (const [name, ref] of Object.entries(manifest.speakers)) texts.set(ref.file, spokenRole(name));
   for (const [i, ref] of Object.entries(manifest.headings)) if (model.scenes[i]) texts.set(ref.file, model.scenes[i].heading);
-  for (const [key, ref] of Object.entries(manifest.coach || {})) texts.set(ref.file, COACH[key]);
+  for (const [key, ref] of Object.entries(manifest.coach || {})) texts.set(ref.file, COACH_SPEECH[key]);
   for (const it of model.items) for (const n of it.cue.notes) if (manifest.notes && manifest.notes[noteKey(n)]) texts.set(manifest.notes[noteKey(n)].file, spokenNote(n));
   return texts;
 }
@@ -75,7 +85,8 @@ export function showWalk(ctx) {
           h('li', {}, 'New line: just listen, then say it back when you are told.'),
           h('li', {}, 'Your turn: you hear your cue. Say your line in the gap.'),
           h('li', {}, 'Then you hear it, so you can check.'),
-          pack ? h('li', {}, 'Got it wrong, or not sure? Double tap an earbud. Press back to hear it again.') : h('li', {}, 'Got it wrong, or not sure? Tap Missed. Keep the screen on.'),
+          pack ? h('li', {}, 'Got it wrong, or not sure? Double tap an earbud. Press back on your earbuds, or tap Hear it again.') : h('li', {}, 'Got it wrong, or not sure? Tap Missed. Keep the screen on.'),
+          h('li', {}, 'Stop walking before you look at your phone.'),
         ),
         h('h2', {}, 'How long?'),
         h('div', { class: 'choice-grid' }, LENGTHS.map((m) => button(`${m} minutes`, settled(() => build(m)), { class: 'btn big' }))),
@@ -109,7 +120,7 @@ export function showWalk(ctx) {
     }
     const about = [];
     if (tape.duration < minutes * 60 - 120) about.push(h('p', { class: 'help' }, 'This one is short, because it covers everything useful for now.'));
-    if (tape.missing) about.push(h('p', { class: 'help' }, `${plural(tape.missing, 'line')} have no audio in the pack, so they are left out.`));
+    if (tape.missing) about.push(h('p', { class: 'help' }, `${plural(tape.missing, 'line')} ${tape.missing === 1 ? 'has no audio in the pack, so it is' : 'have no audio in the pack, so they are'} left out.`));
     if (ctx.manifest) audioWalk(tape, plan, about);
     else speechWalk(tape, plan, clipTexts(manifest, ctx.model), about);
   }
@@ -148,22 +159,26 @@ export function showWalk(ctx) {
     const bar = h('div', { class: 'timebar', role: 'img', 'aria-label': 'How far through the walk' }, fill);
 
     const mark = (t) => {
-      const i = trialAt(tape.trials, t);
+      const i = markTrial(tape, t);
       if (i < 0) return;
       marked.add(i);
-      countEl.textContent = `${plural(marked.size, 'line')} marked as missed.`;
+      countEl.textContent = `${plural(markedLines(tape, marked), 'line')} marked as missed.`;
       announce('Marked');
     };
     const replay = (t) => {
-      const i = trialAt(tape.trials, t);
-      if (i < 0) return;
-      const from = tape.trials[i].replayFrom ?? tape.trials[i].start;
+      const from = replayPoint(tape, t);
+      if (from === null) return;
       player.seek(from);
       times.rewind(from);
     };
     const player = createPlayer({
       onMark: mark,
       onReplay: replay,
+      resumeFrom: (t) => {
+        const from = resumePoint(tape, t);
+        if (from !== null) times.rewind(from);
+        return from;
+      },
       onTime: (t) => {
         times.at(t);
         fill.style.width = `${Math.min(100, (100 * t) / tape.duration)}%`;
@@ -177,7 +192,7 @@ export function showWalk(ctx) {
       onEnded: () => review(tape, plan, marked, Infinity, started, times),
       onError: () => {
         player.destroy();
-        speechWalk(tape, plan, clipTexts(ctx.manifest, ctx.model), [h('p', { class: 'message' }, 'The tape would not play, so the phone will read it aloud instead.')]);
+        speechWalk(tape, plan, clipTexts(ctx.manifest, ctx.model), [h('p', { class: 'message' }, 'The audio would not play, so the phone will read it aloud instead.')]);
       },
     });
     player.load(blob, { title: label, artist: 'Off Script' });
@@ -194,7 +209,7 @@ export function showWalk(ctx) {
 
     page(
       'Walk',
-      [...about, partEl, bar, countEl, h('p', { class: 'help' }, 'Got it wrong, or not sure? Double tap an earbud, or tap Missed that one. To hear a line again, press back on the earbuds.')],
+      [...about, partEl, bar, countEl, h('p', { class: 'help' }, 'Got it wrong, or not sure? Double tap an earbud, or tap Missed that one. To hear a line again, press back on your earbuds, or tap Hear it again.')],
       [
         playBtn,
         h('div', { class: 'row' }, button('Missed that one', () => mark(player.time)), button('Hear it again', () => replay(player.time))),
@@ -266,15 +281,22 @@ export function showWalk(ctx) {
       playing = true;
       playBtn.textContent = 'Pause';
       if (started === null) started = Date.now();
-            release = await keepScreenOn();
+      else {
+        const from = resumePoint(tape, now() + 0.01); // back to the line's cue
+        if (from !== null) {
+          pos = starts.findIndex((s) => s >= from - 1e-6);
+          times.rewind(from);
+        }
+      }
+      release = await keepScreenOn();
       run();
     }, { class: 'btn primary big' });
 
     const tap = (missed) => {
-      const i = trialAt(tape.trials, now() + 0.01);
+      const i = markTrial(tape, now() + 0.01);
       if (missed && i >= 0) {
         marked.add(i);
-        countEl.textContent = `${plural(marked.size, 'line')} marked as missed.`;
+        countEl.textContent = `${plural(markedLines(tape, marked), 'line')} marked as missed.`;
         announce('Marked');
       }
       if (skip && tape.steps[pos] && tape.steps[pos].silence) skip();
@@ -292,7 +314,7 @@ export function showWalk(ctx) {
       'Walk',
       [
         ...about,
-        canSpeak() ? null : h('p', { class: 'message' }, 'This phone cannot read aloud here, so Walk needs an audio pack.'),
+        canSpeak() ? null : h('p', { class: 'message' }, 'This phone cannot read aloud, so Walk will not work here. Try a round instead.'),
         partEl,
         countEl,
         h('p', { class: 'help' }, 'Keep the screen on. Tap Got it to move on sooner.'),
@@ -317,16 +339,24 @@ export function showWalk(ctx) {
     };
   }
 
-  function review(tape, plan, marked, stoppedAt, started, times) {
+  // A tapped row is filled in: a tick would read as right.
+  const paintRow = (input) =>
+    Object.assign(input.style, { appearance: 'none', webkitAppearance: 'none', borderRadius: '50%', border: '2px solid var(--missed)', backgroundColor: input.checked ? 'var(--missed)' : 'transparent' });
+
+  // restored: a walk heard earlier, whose review was never saved.
+  function review(tape, plan, marked, stoppedAt, started, times, restored = false) {
     teardown();
     teardown = () => {};
     const rows = reviewRows(tape, marked, stoppedAt);
     let saving = false;
     if (!rows.length) {
-      return page('Walk ended', [h('p', { class: 'lead' }, 'Nothing was heard all the way through, so there is nothing to save.')], [
+      const said = started === null ? 'You stopped before the walk began, so there is nothing to save.' : 'You stopped before your first go at a line, so there is nothing to save. The listening still helps.';
+      return page('Walk ended', [h('p', { class: 'lead' }, said)], [
         button('Back to my lines', settled(() => ctx.go('today')), { class: 'btn primary' }),
       ]);
     }
+    // Kept until saved or let go: a phone can clear the page once the tape has ended.
+    const kept = ctx.store.set(DRAFT, { hash: ctx.model.hash, trials: tape.trials, marked, stoppedAt, started, heard: times.heard, k: plan.k, length }).catch(() => {});
     const list = h(
       'ul',
       { class: 'review-list' },
@@ -334,44 +364,71 @@ export function showWalk(ctx) {
         const it = ctx.index.byId.get(row.id);
         const words = joinTokens(it.tokens.slice(0, 8));
         const id = `row-${i}`;
-        return h(
-          'li',
-          {},
-          h(
-            'label',
-            { for: id },
-            h('input', { id, type: 'checkbox', checked: row.ticked, onChange: (e) => (row.ticked = e.target.checked) }),
-            h('span', {}, h('strong', {}, it.speaker), ': ', words, it.tokens.length > 8 ? '…' : ''),
-          ),
-        );
+        const box = h('input', {
+          id,
+          type: 'checkbox',
+          checked: row.ticked,
+          onChange: (e) => {
+            row.ticked = e.target.checked;
+            paintRow(e.target);
+          },
+        });
+        paintRow(box);
+        return h('li', {}, h('label', { for: id }, box, h('span', {}, h('strong', {}, it.speaker), ': ', words, it.tokens.length > 8 ? '…' : '')));
       }),
     );
     page(
       'How did it go?',
-      [h('p', { class: 'lead' }, `${plural(rows.length, 'line')} on this walk. Tick any you missed or were not sure about. Be honest: it only helps you.`), h('p', { class: 'help' }, 'Lines count towards your % once you have typed them in a round.'), list],
       [
-        button('All good apart from the ticked ones', settled(async () => {
+        restored ? h('p', { class: 'message' }, 'Here is your last walk. It was kept for you.') : null,
+        h('p', { class: 'lead' }, `${plural(rows.length, 'line')} on this walk. Tap any you missed or were not sure about.`),
+        h('p', { class: 'help' }, 'Lines count towards your % once you have typed them in a round.'),
+        list,
+      ],
+      [
+        button('Save my walk', settled(async () => {
           if (saving) return; // saved once, however many taps
           saving = true;
           const start = started ?? Date.now();
-          const results = walkResults(tape, rows, marked).map((r) => ({ ...r, at: times.heard.has(r.trial) ? (times.heard.get(r.trial) - start) / 1000 : r.at }));
+          let last = 0; // in tape order, whether heard or only marked
+          const results = walkResults(tape, rows, marked).map((r) => {
+            last = Math.max(last, times.heard.has(r.trial) ? (times.heard.get(r.trial) - start) / 1000 : r.at);
+            return { ...r, at: last };
+          });
           const records = walkRecords(results, { start, getState: ctx.getState, k: plan.k });
           for (const rec of records) await ctx.saveAnswer(rec);
+          await kept;
+          await ctx.store.del(DRAFT);
           ctx.refit();
           sync(ctx);
           const missed = rows.filter((r) => r.ticked).length;
           announce('Walk saved');
-          page('Walk saved', [h('p', { class: 'lead' }, `${plural(rows.length, 'line')}, ${missed ? `${missed} to look at again` : 'all word perfect'}.`)], [
+          page('Walk saved', [h('p', { class: 'lead' }, `${plural(rows.length, 'line')} practised${missed ? `, ${missed} to look at again` : ''}. Your practice counts when you next type them.`)], [
             button(`Another ${length} minutes`, settled(() => build(length)), { class: 'btn primary' }),
             button('A different length', settled(choose)),
             button('Back to my lines', settled(() => ctx.go('today'))),
           ]);
         }), { class: 'btn primary' }),
-        button('Don’t count this one', settled(() => !saving && ctx.go('today'))),
+        button('Don’t count this one', settled(async () => {
+          if (saving) return;
+          await kept;
+          await ctx.store.del(DRAFT);
+          ctx.go('today');
+        })),
       ],
     );
   }
 
+  // A walk that ended with its review not saved comes first, if it is still for this script.
+  async function restore() {
+    const nav = ctx.nav;
+    const draft = await ctx.store.get(DRAFT);
+    if (ctx.nav !== nav || length !== null || !draft || draft.hash !== ctx.model.hash || !draft.trials.every((tr) => ctx.index.byId.has(tr.id))) return;
+    length = draft.length;
+    review({ trials: draft.trials }, { k: draft.k }, draft.marked, draft.stoppedAt, draft.started, { heard: draft.heard }, true);
+  }
+
   choose();
+  restore();
   return () => teardown();
 }
