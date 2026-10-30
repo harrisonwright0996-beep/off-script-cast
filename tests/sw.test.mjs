@@ -29,7 +29,7 @@ test('everything the app imports is in the offline cache, so it opens with no si
 test('the page can reach only its own worker, and has no inline script or style', () => {
   const html = read('index.html');
   const csp = html.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)[1];
-  assert.equal(csp, "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://off-script-cast.example.workers.dev; object-src 'none'; base-uri 'none'; form-action 'none'");
+  assert.equal(csp, "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://off-script-cast.off-script-lines.workers.dev; object-src 'none'; base-uri 'none'; form-action 'none'");
   assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)[^>]*>/, 'no inline scripts');
   assert.doesNotMatch(html, /<style|\sstyle=/, 'no inline styles');
   for (const f of [...ls('src', '.js'), ...ls('src/cast', '.js'), ...ls('src/ui', '.js')]) {

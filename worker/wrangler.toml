@@ -8,3 +8,7 @@ crons = ["*/15 * * * *"]
 
 [vars]
 ORIGIN = "https://harrisonwright0996-beep.github.io"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "0b2b60a5b3c94fb58796256f033661c2"

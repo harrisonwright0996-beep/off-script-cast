@@ -34,7 +34,7 @@ export const test = base.extend({
 });
 
 export const CODE = 'otter lamp river nine';
-export const WORKER = 'https://off-script-cast.example.workers.dev';
+export const WORKER = 'https://off-script-cast.off-script-lines.workers.dev';
 
 // Everything the worker would hold for the invented play: sealed, as the real ones are.
 let sealed = null;
