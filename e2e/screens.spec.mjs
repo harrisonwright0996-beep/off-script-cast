@@ -52,6 +52,7 @@ test('settings: look changes at once; back up, restore, remove everything', asyn
   await page.getByRole('button', { name: 'Remove everything' }).click();
   await expect(page.getByRole('heading', { name: 'Remove everything?' })).toBeVisible();
   await page.getByRole('button', { name: 'Remove everything' }).click();
+  await expect(page.getByRole('button', { name: 'Carry on without installing' }).or(page.getByLabel('Company code'))).toBeVisible(); // the page starts afresh first
   await importScript(page);
   expect(await page.evaluate(() => window.offScript.states.size)).toBe(0);
 
