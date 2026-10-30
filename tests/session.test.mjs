@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { fakeApp, learn } from './helpers.mjs';
 import { createSession, linesLeft, TEACH_FIRST_MESSAGE, AHEAD_MESSAGE, EXTRA_RUN_MESSAGE, AGAIN_MESSAGE, CLOSING_MESSAGE, LETTERS_MESSAGE, SHUFFLE_MESSAGE, LADDER_MESSAGE, GAP, POOL, CHECK_EVERY, LONG, BACKS, rungsOf } from '../src/session.js';
 import { makeResult } from '../src/grade.js';
+import { isLearnt, learntPercent } from '../src/cast/proof.js';
+import { applyKnown } from '../src/state.js';
 
 const start = (app, opts = {}) =>
   createSession({ model: app.model, index: app.index, getPlan: app.plan, getState: app.getState, settings: app.settings, now: app.now, ...opts });
@@ -858,4 +860,135 @@ test('two beats part learned, each with a line in flight (as a chosen practice c
   assert.ok(log.indexOf(`new:test:${b1.itemIds[1]}`) >= 0, 'the first beat part learned goes on');
   assert.ok(log.indexOf(`new:test:${b2.itemIds[1]}`) > log.indexOf(`new:test:${b1.itemIds[1]}`), 'then the second');
   for (const it of app.model.items) assert.equal(app.getState(it.id).status, 'review', 'every line learned');
+});
+
+const PROOF = { proofs: true };
+
+// A line right once from its cue, an hour ago, not yet proved: its next go from the cue is typed.
+const onceRight = { status: 'learning', learnedDay: null, passes: 1, helped: 3, stability: 1, hoursAgo: 1 };
+
+test('a line typed right in Already know some? is not ready the same day, and on a later day its first go is the typed one', () => {
+  const app = fakeApp({ settings: PROOF, today: '2026-10-27' });
+  const id = app.model.items[0].id;
+  app.states.set(id, applyKnown(app.getState(id), { day: app.today, time: app.clock }));
+  app.wait(600); // ten hours on: the curve alone would call it ready
+  assert.equal(app.plan().ready.has(id), false);
+  app.setDay('2026-10-28');
+  assert.equal(app.plan().ready.has(id), true);
+  const s = start(app, { scope: 'tests' });
+  const c = s.advance();
+  assert.deepEqual([c.item.id, c.step, c.mustType], [id, 'floor', true], 'no first letters: this is the proof');
+  answer(app, s, true);
+  assert.equal(isLearnt(app.getState(id)), true);
+});
+
+test('a line known today cannot be proved today, even from a chosen practice or a round', () => {
+  const app = fakeApp({ settings: PROOF, today: '2026-10-27' });
+  const id = app.model.items[0].id;
+  app.states.set(id, applyKnown(app.getState(id), { day: app.today, time: app.clock }));
+  const s = start(app, { custom: { itemIds: [id], help: 'cue' } });
+  assert.equal(s.advance().mustType, false);
+  answer(app, s, true);
+  assert.equal(app.getState(id).proved, false);
+});
+
+test('proof is earned only in the day\'s rounds: not in a chosen practice, a run through, or a run of a scene', () => {
+  for (const custom of [{ itemIds: null, help: 'none' }, { itemIds: null, help: 'cue' }, { itemIds: null, help: 'none', run: true }]) {
+    const app = fakeApp({ settings: PROOF });
+    const ids = app.model.scenes[1].itemIds;
+    custom.itemIds = ids;
+    const s = start(app, { custom });
+    play(app, s, { decide: () => true });
+    assert.ok(ids.every((id) => app.getState(id).passes >= 1));
+    assert.ok(ids.every((id) => !app.getState(id).proved), 'nothing proved');
+    assert.equal(learntPercent(app.model, app.getState), 0);
+  }
+});
+
+test('a practice leaves a line unlocked, while a round makes the same go typed, and it counts there', () => {
+  const app = fakeApp({ settings: PROOF });
+  const id = app.model.items[0].id;
+  learn(app, [id], onceRight);
+  const practice = start(app, { custom: { itemIds: [id], help: 'cue' } });
+  assert.equal(practice.advance().mustType, false, 'typing here would not count, so it is not asked for');
+  const round = start(app);
+  let c = round.advance();
+  while (c.step !== 'floor') {
+    answer(app, round, true);
+    c = round.advance();
+  }
+  assert.equal(c.item.id, id);
+  assert.equal(c.mustType, true);
+  answer(app, round, true);
+  assert.equal(app.getState(id).proved, true);
+});
+
+test('an extra run proves nothing', () => {
+  const app = fakeApp({ settings: PROOF });
+  const ids = app.model.scenes[1].itemIds;
+  learn(app, ids, { stability: 500, hoursAgo: 1, proved: true });
+  app.states.set(ids[0], { ...app.getState(ids[0]), proved: false });
+  const plan = app.plan;
+  app.plan = () => Object.assign(plan(), { ready: new Map(), newBeats: [], ahead: [] }); // today's plan is done
+  const s = start(app);
+  s.state.extra = 'runs';
+  const c = s.advance();
+  assert.deepEqual([c.item.id, c.queue, c.mustType], [ids[0], 'run', false]);
+  answer(app, s, true);
+  assert.equal(app.getState(ids[0]).proved, false);
+});
+
+test('a miss loses the proof, and the go that wins it back is typed', () => {
+  const app = fakeApp({ settings: PROOF, today: '2026-10-27' });
+  const id = app.model.items[0].id;
+  learn(app, [id], { stability: 1, hoursAgo: 3, proved: true });
+  assert.equal(learntPercent(app.model, app.getState) > 0, true);
+  const s = start(app, { scope: 'tests' });
+  let c = s.advance();
+  assert.equal(c.item.id, id);
+  while (c.step !== 'floor') {
+    answer(app, s, true);
+    c = s.advance();
+  }
+  assert.equal(c.mustType, false);
+  answer(app, s, false);
+  assert.equal(app.getState(id).proved, false);
+  c = s.advance();
+  while (c && c.step !== 'floor') {
+    answer(app, s, true);
+    c = s.advance();
+  }
+  assert.deepEqual([c.item.id, c.mustType], [id, true]);
+  answer(app, s, true);
+  assert.equal(isLearnt(app.getState(id)), true);
+});
+
+test('a slip of the finger counted right proves nothing', () => {
+  const app = fakeApp({ settings: PROOF });
+  const id = app.model.items[0].id;
+  learn(app, [id], onceRight);
+  const s = start(app, { scope: 'all' });
+  let c = s.advance();
+  while (c.step !== 'floor') {
+    answer(app, s, true);
+    c = s.advance();
+  }
+  app.save(s.answer(makeResult({ misses: [], mode: 'type', slip: true })));
+  assert.equal(app.getState(id).proved, false);
+  assert.equal(app.getState(id).lastResult, 'pass');
+});
+
+test('a line said and undone cannot then be typed for proof, but a later sprint can', () => {
+  const app = fakeApp({ settings: PROOF });
+  const id = app.model.items[0].id;
+  const s = start(app);
+  s.advance();
+  const c = s.choose('try');
+  assert.equal(c.step, 'floor');
+  const rec = s.answer(makeResult({ misses: [], mode: 'say' }));
+  const back = s.restore(rec.snapshot, id);
+  assert.equal(back.item.id, id);
+  app.save(s.answer(makeResult({ misses: [], mode: 'type' })));
+  assert.equal(app.getState(id).passes, 1);
+  assert.equal(app.getState(id).proved, false);
 });

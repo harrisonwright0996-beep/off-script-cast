@@ -117,7 +117,7 @@ test('Run through: everything learned so far in script order; a miss carries on 
   }
   expect(shown).toEqual([...learned, learned[1]]); // in order, then the miss once the Scene 1 run is done
   await expect(page.getByRole('heading', { name: 'Run through done' })).toBeVisible();
-  await expect(page.getByText('All my lines, everything learned so far.')).toBeVisible();
+  await expect(page.getByText('All my lines, everything learnt so far.')).toBeVisible();
   await expect(page.getByText('8 answers, 7 word perfect.')).toBeVisible();
   await page.getByRole('button', { name: 'Run through again' }).click();
   await expect(page.getByRole('heading', { name: 'Run through' })).toBeVisible();

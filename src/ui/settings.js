@@ -23,6 +23,8 @@ const BACKUP_PROBLEMS = {
   'not-json': 'That file is not an Off Script backup.',
   'not-backup': 'That file is not an Off Script backup.',
   newer: 'That backup is from a newer version of Off Script. Update the app first.',
+  'other-member': 'That backup belongs to someone else in the cast, so it cannot go on this phone.',
+  'no-lines': 'That backup has none of your lines in it, so nothing was changed.',
 };
 
 const FORGET_WAIT = 3000; // no signal must not hold up removing everything
@@ -46,7 +48,7 @@ const when = (ms) => {
 // Saves a backup of his progress: to Files by the share sheet where there is one, else a download.
 export async function saveBackup(ctx) {
   const events = await ctx.store.allEvents();
-  const data = makeBackup({ model: ctx.model, states: ctx.states.values(), events, settings: ctx.settings });
+  const data = makeBackup({ model: ctx.model, states: ctx.states.values(), events, settings: ctx.settings, member: ctx.member && ctx.member.name });
   const name = `Off Script progress ${formatDay(dayKey())}.json`;
   const file = new File([JSON.stringify(data)], name, { type: 'application/json' });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -117,7 +119,7 @@ export function showSettings(ctx) {
     if (!file) return;
     let b;
     try {
-      b = readBackup(await file.text(), ctx.model);
+      b = readBackup(await file.text(), ctx.model, ctx.member && ctx.member.name);
     } catch (err) {
       return page('That did not work', [h('p', { class: 'lead' }, BACKUP_PROBLEMS[err.code] || BACKUP_PROBLEMS['not-backup'])], [
         button('Back to Settings', () => ctx.go('settings'), { class: 'btn primary' }),

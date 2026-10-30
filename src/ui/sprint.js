@@ -3,8 +3,9 @@
 // and so is the sprint, so closing the app loses nothing. Time is a slim bar that only moves when he
 // does something; at time up nothing new comes, only the lines still to finish, then Sprint done.
 import { h, clear, screen, button, announce, focusHeading, num, plural, drawn, settled } from './dom.js';
+import { gainLine, isLearnt, learntPercent } from '../cast/proof.js';
 import { createSession, linesLeft } from '../session.js';
-import { createTypeCheck, sayMisses, makeResult, describeResult, repeatMisses, troubleNote } from '../grade.js';
+import { createTypeCheck, onlySlip, sayMisses, makeResult, describeResult, repeatMisses, troubleNote } from '../grade.js';
 import { blankOf, firstLettersOf, gapsOf, lettersShown } from '../tokens.js';
 import { canSpeak, speak, stopSpeaking } from '../tts.js';
 import { keypad } from './keypad.js';
@@ -63,9 +64,26 @@ export function gapsView(tokens, gaps) {
 
 export function statsLine(st) {
   const parts = [`${plural(st.answered, 'answer')}, ${num(st.perfect)} word perfect.`];
-  if (st.learnedItems) parts.push(`${plural(st.learnedItems, 'line')} learned (${plural(st.learnedWords, 'word')}).`);
+  if (st.learnedItems) parts.push(`${plural(st.learnedItems, 'line')} learnt (${plural(st.learnedWords, 'word')}).`);
   return parts.join(' ');
 }
+
+// The page scrolls behind the bar and the footer (the keypad, or the buttons), so a long cue and a
+// long line can push the line being answered out of sight. Scrolls down just enough to show `el`
+// above the footer, keeping its top below the bar.
+export function keepInView(root, el) {
+  if (!el || !el.isConnected) return;
+  const bar = root.querySelector('.bar');
+  const foot = root.querySelector('footer');
+  const top = bar ? bar.getBoundingClientRect().bottom : 0;
+  const bottom = foot ? foot.getBoundingClientRect().top : window.innerHeight;
+  const r = el.getBoundingClientRect();
+  const by = Math.min(r.bottom + 8 - bottom, r.top - 8 - top);
+  if (by > 0) window.scrollBy(0, by);
+}
+
+// The word just answered: on a long line the whole line may not fit above the keypad.
+export const newestWord = (line) => line.lastElementChild || line;
 
 const minus = (a, b) => Object.fromEntries(Object.keys(a).map((k) => [k, a[k] - (b[k] || 0)]));
 
@@ -107,14 +125,19 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
   });
   const chosen = practice ? session.state.custom : null; // the chosen practice under way
   const startStats = { ...session.stats };
+  const startPercent = learntPercent(ctx.model, ctx.getState);
+  const practised = new Set(); // lines answered on this screen
   const undo = [];
-  let elapsed = usable ? saved.elapsed || 0 : 0;
+  // A short round is a fresh go at the clock, even when it carries on a longer one that was stopped.
+  let elapsed = usable && !short ? saved.elapsed || 0 : 0;
   let last = Date.now();
   let mode = ctx.settings.mode;
   let removeKeys = null;
   let autoTimer = null;
   let breakTimer = null;
   let finished = false;
+  let held = null; // a miss being saved at its first wrong key
+  let slipRec = null; // the last answer, when it may yet be counted a slip of the finger
 
   const heading = (scene) => ctx.model.scenes[scene].heading;
   const speakerName = (it) => (it.part > 0 ? `${it.speaker}, continuing` : it.speaker);
@@ -167,27 +190,13 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
   function where(c) {
     const it = c.item;
     const part = it.parts > 1 ? `, part ${it.part + 1} of ${it.parts}` : '';
-    if (c.progress) return h('p', { class: 'where' }, `Line ${c.progress.pos} of ${c.progress.total}, speech ${it.n}${part}`);
+    if (c.progress) return h('p', { class: 'where' }, `Line ${c.progress.pos} of ${c.progress.total}, line ${it.n}${part}`);
     const rung = c.rung ? `, step ${c.rung.pos} of ${c.rung.total}` : '';
-    return h('p', { class: 'where' }, `${heading(it.scene)}, speech ${it.n}${part}${rung}`);
+    return h('p', { class: 'where' }, `${heading(it.scene)}, line ${it.n}${part}${rung}`);
   }
 
   const readAloud = (text) =>
     canSpeak() ? button('Read aloud', () => speak(text, { voiceURI: ctx.settings.voiceURI, rate: ctx.settings.rate })) : null;
-
-  // The page scrolls behind the bar and the footer (the keypad, or the buttons), so a long cue and a
-  // long line can push the line being answered out of sight. Scrolls down just enough to show `el`
-  // above the footer, keeping its top below the bar.
-  function keepInView(el) {
-    if (!el || !el.isConnected) return;
-    const bar = ctx.root.querySelector('.bar');
-    const foot = ctx.root.querySelector('footer');
-    const top = bar ? bar.getBoundingClientRect().bottom : 0;
-    const bottom = foot ? foot.getBoundingClientRect().top : window.innerHeight;
-    const r = el.getBoundingClientRect();
-    const by = Math.min(r.bottom + 8 - bottom, r.top - 8 - top);
-    if (by > 0) window.scrollBy(0, by);
-  }
 
   // Draws a card: the bar, where it is, any message, then the card's own content and actions.
   function frame(c, content, footer, footerClass = '') {
@@ -224,11 +233,12 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
   }
 
   // Say: reveal the line, tap any word missed or changed, then Done with the words tapped.
-  function sayCheck(tokens, answerArea, footBox, prompt, done) {
+  function sayCheck(tokens, answerArea, footBox, prompt, done, onReveal = () => {}) {
     const start = Date.now();
     answerArea.append(h('p', { class: 'prompt' }, prompt));
     clear(footBox).append(
       button('Reveal', act(() => {
+        onReveal();
         const ms = timed(start);
         const tapped = new Set();
         const words = h('div', { class: 'words', role: 'group', 'aria-label': 'Tap any word you missed or changed' });
@@ -245,7 +255,7 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
           words.append(b);
         });
         clear(answerArea).append(h('p', { class: 'prompt' }, 'Tap any word you missed or changed.'), words);
-        keepInView(answerArea);
+        keepInView(ctx.root, answerArea);
         let sent = false; // a quick second tap is not a second answer
         clear(footBox).append(
           button('Done', act(() => {
@@ -274,7 +284,7 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     const answerArea = h('div', { class: 'answer-area', role: 'group', tabindex: '-1', 'aria-label': 'Your line' }, h('p', { class: 'line' }, view));
     const footBox = h('div', { class: 'stack-foot' });
     const blanks = item.tokens.some((t, i) => t.k !== null && !shown.has(i));
-    const prompt = c.step === 'gaps' ? 'Say it aloud, gaps too, then reveal it.' : blanks ? 'Say it aloud, blanks too, then reveal it.' : 'Say it aloud from the first letters, then reveal it.';
+    const prompt = c.step === 'gaps' ? 'Say the whole line aloud, filling the gaps, then reveal it.' : blanks ? 'Say the whole line aloud, filling the blanks, then reveal it.' : 'Each letter starts a word. Say the whole line aloud, then reveal it.';
     frame(c, [cueBlock(c.cue), h('p', { class: 'speaker' }, speakerName(item)), answerArea], [footBox]);
     sayCheck(item.tokens, answerArea, footBox, prompt, (misses, ms) => finish(c, makeResult({ misses, mode: 'say', ms })));
   }
@@ -297,9 +307,11 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
           floor(c);
           focusHeading(ctx.root);
         }), { class: 'btn link' });
-    const spot = locked ? h('p', { class: 'spot', role: 'status' }, c.spot ? 'Spot check: type this one.' : 'Type this one to prove you know it.') : null;
+    const spotText = c.spot ? 'Spot check: type this one.' : 'Type this one so it counts towards your %.';
+    const spot = locked ? h('p', { class: 'spot' }, spotText) : null;
 
     frame(c, [cueBlock(c.cue), spot, speakerArea, answerArea, switchMode], [footBox]);
+    if (locked) announce(spotText);
     const foot = ctx.root.querySelector('footer');
 
     let answerStart = 0;
@@ -349,41 +361,81 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
       draw();
       answerArea.append(line, hint);
       let firstMs;
+      let missSaved = null;
       const pad = keypad((key) => {
         const r = key === '?' ? check.reveal() : check.press(key);
         if (!r) return;
         if (firstMs === undefined) firstMs = timed(answerStart);
         hint.remove();
         draw();
-        keepInView(line);
+        keepInView(ctx.root, newestWord(line));
         announce(`${r.correct ? '' : 'Missed: '}${tokens[r.index].d}`);
+        if (!r.correct && !missSaved) {
+          if (switchMode) switchMode.remove();
+          missSaved = holdMiss(makeResult({ misses: check.misses, speakerWrong, mode: 'type' }));
+        }
         if (!r.done) return;
-        // One or two wrong keys, each touching the right one, and nothing else wrong: he may say it
-        // was only a slip of the finger.
-        const slipped = !speakerWrong && check.misses.length <= 2 && check.misses.every((i) => check.slips.includes(i));
         const result = makeResult({ misses: check.misses, speakerWrong, mode: 'type', ms: timed(answerStart), firstMs });
-        once(() => finish(c, result, { slipped }));
+        once(async () => {
+          if (missSaved) await takeBack(await missSaved);
+          await finish(c, result, { slipped: onlySlip(check, item.words, speakerWrong) });
+        });
       });
       removeKeys = pad.remove;
       clear(footBox).append(pad.el);
       foot.className = 'foot keyboard';
-      keepInView(line);
+      keepInView(ctx.root, line);
     }
 
     function sayAnswer() {
-      sayCheck(tokens, answerArea, footBox, 'Say it aloud, then reveal it.', (misses, ms) => finish(c, makeResult({ misses, speakerWrong, mode: 'say', ms })));
+      // The line on show, there is no typing it from memory now.
+      const onReveal = () => switchMode && switchMode.remove();
+      sayCheck(tokens, answerArea, footBox, 'Say it aloud, then reveal it.', (misses, ms) => finish(c, makeResult({ misses, speakerWrong, mode: 'say', ms })), onReveal);
     }
+  }
+
+  // Seconds on the cards since the answer before.
+  const activeSeconds = () => Math.round((elapsed - answeredAt) / 100) / 10;
+
+  // A wrong key shows the right word, so a miss counts from that moment. It is saved at once, so Stop,
+  // a reload or the app closing cannot give him a clean card, and there is no Undo from here. If he
+  // finishes the line, the whole answer takes its place (takeBack), with the chance to call it a slip.
+  function holdMiss(result) {
+    tick();
+    const rec = session.answer(result);
+    rec.event.active = activeSeconds();
+    rec.before = answeredAt;
+    undo.length = 0;
+    for (const b of ctx.root.querySelectorAll('.bar-actions button')) b.remove();
+    held = (async () => {
+      await ctx.saveAnswer(rec);
+      await saveSprint();
+      return rec;
+    })();
+    return held;
+  }
+
+  async function takeBack(rec) {
+    held = null;
+    await ctx.undoAnswer(rec);
+    session.restore(rec.snapshot);
   }
 
   async function finish(c, result, { slipped = false } = {}) {
     quiet();
     tick();
     const rec = session.answer(result);
-    rec.event.active = Math.round((elapsed - answeredAt) / 100) / 10; // seconds on the cards since the answer before
+    rec.event.active = activeSeconds();
     rec.before = answeredAt;
     answeredAt = elapsed;
     await ctx.saveAnswer(rec);
-    undo.push(rec);
+    practised.add(c.item.id);
+    // Undo is for a wrong tap, not a look at the answer. A typed miss has shown the line, and so has a
+    // slip counted right: going back would hand him a card he could now type word for word.
+    const shownByKeys = result.misses.length > 0 && result.mode === 'type';
+    slipRec = shownByKeys ? rec : null;
+    if (shownByKeys || result.slip) undo.length = 0;
+    else undo.push(rec);
     await saveSprint();
     const text = rec.help && result.pass ? RIGHT_WITH[c.step] : result.slip ? 'Counted right: a slip of the finger' : describeResult(result, c.item.tokens, c.item.speaker);
     const note = comesBack(rec);
@@ -393,11 +445,11 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     feedback(c, result, text, note, slipped && !result.pass, trouble, rec);
   }
 
-  // He says the wrong keys were only slips of the finger: the answer is taken back and saved as right.
-  // Only that answer: if it is no longer the last one saved, nothing happens.
+  // He says the wrong key was only a slip of the finger: the answer is taken back and saved as right,
+  // though it proves nothing. Only that answer: if it is no longer the last one saved, nothing happens.
   async function countRight(c, result, rec) {
-    if (!rec || undo[undo.length - 1] !== rec) return;
-    undo.pop();
+    if (!rec || slipRec !== rec) return;
+    slipRec = null;
     quiet();
     await ctx.undoAnswer(rec);
     answeredAt = rec.before;
@@ -409,10 +461,12 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     const misses = new Set(result.misses);
     const block = h(
       'p',
-      { class: `result ${result.pass ? 'perfect' : 'misses'}` },
+      { id: 'result', class: `result ${result.pass ? 'perfect' : 'misses'}` },
       h('span', { class: 'icon', 'aria-hidden': 'true' }, result.pass ? '✓' : '✕'),
       h('span', {}, text),
     );
+    const nextButton = button('Next', act(next), { class: 'btn primary' });
+    nextButton.setAttribute('aria-describedby', ['result', trouble && 'result-trouble', note && 'result-note'].filter(Boolean).join(' '));
     frame(
       { ...c, message: null },
       [
@@ -420,13 +474,13 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
         h('p', { class: 'speaker' }, c.item.speaker),
         h('p', { class: 'line' }, tokenView(c.item.tokens, c.item.tokens.length, misses)),
         block,
-        trouble ? h('p', { class: 'help trouble' }, trouble) : null,
-        note ? h('p', { class: 'help' }, note) : null,
+        trouble ? h('p', { id: 'result-trouble', class: 'help trouble' }, trouble) : null,
+        note ? h('p', { id: 'result-note', class: 'help' }, note) : null,
       ],
-      [button('Next', act(next), { class: 'btn primary' }), slipped ? button('A slip of the finger? Count it right', act(() => countRight(c, result, rec))) : null].filter(Boolean),
+      [nextButton, slipped ? button('A slip of the finger? Count it right', act(() => countRight(c, result, rec))) : null].filter(Boolean),
     );
     ctx.root.querySelector('footer .btn').focus({ preventScroll: true });
-    keepInView(block);
+    keepInView(ctx.root, block);
     if (result.pass && ctx.settings.autoAdvance) autoTimer = setTimeout(next, AUTO_ADVANCE_MS);
   }
 
@@ -436,7 +490,7 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     quiet();
     await ctx.undoAnswer(rec);
     answeredAt = rec.before;
-    const c = session.restore(rec.snapshot);
+    const c = session.restore(rec.snapshot, !rec.help && rec.event.mode === 'say' ? rec.event.id : null);
     await saveSprint();
     announce('Last answer undone');
     showCard(c);
@@ -461,17 +515,25 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
   async function stop() {
     quiet();
     tick();
+    await held;
     await saveSprint();
     ctx.go('today');
   }
 
   function plain(title, body, footer) {
     quiet();
-    clear(ctx.root).append(screen({ title, back: act(stop), backLabel: 'My lines', body, footer }));
+    clear(ctx.root).append(screen({ title, back: act(stop), backLabel: 'Your lines', body, footer }));
     focusHeading(ctx.root);
   }
 
   const done = () => minus(session.stats, startStats);
+
+  // What the round gained, then `text`. With nothing to say, `text` is the headline.
+  function headline(text) {
+    const onWay = [...practised].filter((id) => !isLearnt(ctx.getState(id))).length;
+    const gain = gainLine(startPercent, learntPercent(ctx.model, ctx.getState), onWay);
+    return [gain ? h('p', { class: 'lead' }, gain) : null, h('p', { class: gain ? null : 'lead' }, text)];
+  }
 
   // One short note on why this works, a different one each round.
   async function science() {
@@ -487,18 +549,18 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     saveSprint();
     const st = done();
     if (short) {
-      return plain('Keep going?', [h('p', { class: 'lead' }, statsLine(st)), h('p', {}, 'Starting is the hard part, and it is done.')], [
+      return plain('Keep going?', [headline(statsLine(st)), h('p', {}, 'Starting is the hard part, and it is done.')], [
         button('Another round', act(() => ctx.go('sprint')), { class: 'btn primary' }),
         button('Stop for now', act(() => ctx.go('today'))),
       ]);
     }
     const left = chosen ? linesLeft(session.state) : 0;
     science().then((note) =>
-      plain('Round done', [h('p', { class: 'lead' }, statsLine(st)), left ? h('p', {}, `${plural(left, 'line')} of this ${chosen.run ? 'run through' : 'practice'} still to go.`) : null, note], [
+      plain('Round done', [headline(statsLine(st)), left ? h('p', {}, `${plural(left, 'line')} of this ${chosen.run ? 'run through' : 'practice'} still to go.`) : null, note], [
         left
           ? button('Carry on', act(() => ctx.go('sprint', { practice: 'resume' })), { class: 'btn primary' })
           : button('Another round', act(() => ctx.go('sprint')), { class: 'btn primary' }),
-        button('Back to my lines', act(() => ctx.go('today'))),
+        button('Back to your lines', act(() => ctx.go('today'))),
       ]),
     );
   }
@@ -512,17 +574,17 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
         chosen.run
           ? button('Run through again', act(() => ctx.go('choose', { run: true })), { class: 'btn primary' })
           : button('Choose again', act(() => ctx.go('choose')), { class: 'btn primary' }),
-        button('Back to my lines', act(() => ctx.go('today'))),
+        button('Back to your lines', act(() => ctx.go('today'))),
       ]);
     }
     if (custom) {
       return plain('Run done', [h('p', { class: 'lead' }, `That was a run of ${heading(custom.scene)}.`), said], [
         button('Back to the scene', act(() => ctx.go('reader', { scene: custom.scene })), { class: 'btn primary' }),
-        button('Back to my lines', act(() => ctx.go('today'))),
+        button('Back to your lines', act(() => ctx.go('today'))),
       ]);
     }
     if (scope === 'tests') {
-      return plain('Checks done', [h('p', { class: 'lead' }, 'Everything ready to check is done.'), said], [
+      return plain('Checks done', [headline('Everything ready to check is done.'), said], [
         button('Another round', act(() => ctx.go('sprint')), { class: 'btn primary' }),
         button('Stop for now', act(() => ctx.go('today'))),
       ]);
@@ -533,7 +595,7 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
       plan.extraRuns.length ? button('An extra run', act(() => keepGoing('runs')), { class: plan.ahead.length ? 'btn' : 'btn primary' }) : null,
       button('Stop for now', act(() => ctx.go('today'))),
     ].filter(Boolean);
-    science().then((note) => plain('All caught up', [h('p', { class: 'lead' }, 'Everything ready for now is done.'), said, note], footer));
+    science().then((note) => plain('All caught up', [headline('Everything ready for now is done.'), said, note], footer));
   }
 
   const onVisibility = () => {

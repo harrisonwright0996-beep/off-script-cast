@@ -1,6 +1,7 @@
 // Scenes: the play scene by scene, and a reader for each: speech numbers, speakers in bold,
 // directions in square brackets (never italics), on screen text marked as such.
 import { h, screen, button, announce } from './dom.js';
+import { linesToCheck } from './checkin.js';
 import { progressOf } from '../plan.js';
 import { bracketParens } from '../items.js';
 import { canSpeak, speak, stopSpeaking } from '../tts.js';
@@ -8,12 +9,17 @@ import { canSpeak, speak, stopSpeaking } from '../tts.js';
 export function showScenes(ctx) {
   const progress = progressOf(ctx.model, ctx.index, ctx.getState);
   const focus = ctx.settings.focusScene;
+  const check = button('Already know some? Check them', () => ctx.go('checkin'));
+  // Each line has one try, so the offer goes once none is left to try.
+  ctx.store.get('checkTried').then((tried) => {
+    if (!linesToCheck(ctx.model, ctx.getState, new Set(tried || [])).length) check.remove();
+  });
   ctx.root.append(
     screen({
       title: 'Read my lines',
       back: () => ctx.go('today'),
       backLabel: 'Your lines',
-      footer: ctx.model.items.some((it) => ctx.getState(it.id).status === 'new') ? [button('Already know some? Check them', () => ctx.go('checkin'))] : [],
+      footer: [check],
       body: [
         h(
           'ul',

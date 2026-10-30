@@ -4,8 +4,8 @@ import { fakeApp, fixtureModel, learn } from './helpers.mjs';
 import { indexModel } from '../src/items.js';
 import { memberModel } from '../src/cast/subset.js';
 import { cleanCode, deriveKeys, seal, unseal, tokenHash } from '../src/cast/pack.js';
-import { crossed, earnsProof, fadingCount, isLearnt, learntPercent, needsProof, sceneLights, spotCheck } from '../src/cast/proof.js';
-import { newState, applyKnown, applyResult } from '../src/state.js';
+import { crossed, earnsProof, fadingCount, gainLine, isLearnt, learntPercent, needsProof, sceneLights, spotCheck } from '../src/cast/proof.js';
+import { newState, applyKnown, applyResult, knownToday } from '../src/state.js';
 import { detect, mustInstall } from '../src/device.js';
 import { nextNudge, nudgeText, nudgeWhy } from '../src/cast/reminders.js';
 import { SCIENCE } from '../src/cast/science.js';
@@ -90,9 +90,10 @@ test('only typed, from the cue alone, off the ladder, earns proof', () => {
   assert.equal(earnsProof({ pass: false, mode: 'type' }), false);
   assert.equal(earnsProof({ pass: true, mode: 'type', help: true }), false);
   assert.equal(earnsProof({ pass: true, mode: 'type', ladder: true }), false);
+  assert.equal(earnsProof({ pass: true, mode: 'type', slip: true }), false, 'a slip of the finger counted right proves nothing');
 });
 
-test('a saved proof stays, and a line said right twice still needs one', () => {
+test('a proof stays through right answers, a line said right twice still needs one, and any miss loses it', () => {
   const day = '2026-10-30';
   let s = applyResult(newState('x'), { pass: true, day, time: 1, mode: 'say' });
   assert.equal(needsProof(s), true);
@@ -101,9 +102,17 @@ test('a saved proof stays, and a line said right twice still needs one', () => {
   assert.equal(isLearnt(s), false);
   s = applyResult(s, { pass: true, day, time: 3, mode: 'type', proof: true });
   assert.equal(isLearnt(s), true);
-  s = applyResult(s, { pass: false, day, time: 4, mode: 'say' });
+  s = applyResult(s, { pass: true, day, time: 4, mode: 'say' });
   assert.equal(s.proved, true);
-  assert.equal(isLearnt(s), false);
+  for (const mode of ['type', 'say', 'walk']) {
+    const missed = applyResult(s, { pass: false, day, time: 5, mode });
+    assert.equal(missed.proved, false, `a miss by ${mode}`);
+    assert.equal(needsProof(missed, day), true, 'so the next go from the cue is typed');
+    const said = applyResult(missed, { pass: true, day, time: 6, mode: 'say' });
+    assert.equal(isLearnt(said), false, 'and saying it does not win it back');
+    assert.equal(isLearnt(applyResult(missed, { pass: true, day, time: 6, mode: 'walk' })), false, 'nor does a walk');
+    assert.equal(isLearnt(applyResult(said, { pass: true, day, time: 7, mode: 'type', proof: true })), true, 'typing it does');
+  }
 });
 
 test('spot checks fall on about a third of learned lines, and never on a new one', () => {
@@ -206,10 +215,41 @@ test('the end of the show is a real day, in the form today is compared with', ()
 });
 
 test('a line already known is learnt and proved at once, and comes back as a check', () => {
+test('a line already known needs no teaching, but is not learnt until typed right on a later day', () => {
   const s = applyKnown(newState('x'), { day: '2026-11-02', time: 1000 });
-  assert.equal(isLearnt(s), true);
-  assert.equal(needsProof(s), false);
+  assert.equal(s.status, 'review');
   assert.equal(s.lastResult, 'pass');
+  assert.equal(s.proved, false);
+  assert.equal(isLearnt(s), false);
+  assert.equal(knownToday(s, '2026-11-02'), true);
+  assert.equal(knownToday(s, '2026-11-01'), true, 'the clock put back does not help');
+  assert.equal(knownToday(s, '2026-11-03'), false);
+  assert.equal(needsProof(s, '2026-11-02'), false, 'not the same day');
+  assert.equal(needsProof(s, '2026-11-03'), true, 'on another day');
+  assert.equal(isLearnt(applyResult(s, { pass: true, day: '2026-11-03', time: 2000, mode: 'type', proof: true })), true);
+});
+
+test('the end of a round says what it gained: the rise in %, or else the lines on their way', () => {
+  assert.equal(gainLine(24, 28, 6), 'Up 4% to 28%.');
+  assert.equal(gainLine(0, 0, 6), '6 lines on their way.');
+  assert.equal(gainLine(0, 0, 1), '1 line on its way.');
+  assert.equal(gainLine(30, 28, 2), '2 lines on their way.', 'never a telling off, even after a drop');
+  assert.equal(gainLine(30, 30, 0), null);
+});
+
+test('fading counts lines the curve says are going, not lines ready only because of the date', () => {
+  const app = fakeApp({ settings: { proofs: true } });
+  const ids = app.model.items.map((it) => it.id);
+  learn(app, ids, { proved: true, stability: 500, hoursAgo: 48 });
+  const before = app.plan();
+  assert.equal(fadingCount(before.ready, app.getState), 0);
+  app.setDay('2026-11-03'); // a final day: every line is ready today
+  learn(app, ids, { proved: true, stability: 500, hoursAgo: 24 });
+  const after = app.plan();
+  assert.equal(after.ready.size, ids.length);
+  assert.equal(fadingCount(after.ready, app.getState), 0, 'nothing has changed for them');
+  learn(app, ids.slice(0, 3), { proved: true, stability: 1, hoursAgo: 24 });
+  assert.equal(fadingCount(app.plan().ready, app.getState), 3);
 });
 
 test('the next nudge is never within 20 hours, never past a week, and falls in the afternoon for new lines', () => {

@@ -25,8 +25,8 @@ test('which lines: still being learned, everything learned so far, or every line
 
 test('a choice has a plain name', () => {
   const { model } = fakeApp();
-  assert.equal(practiceTitle({ model, scene: null, which: 'learned' }), 'All my lines, everything learned so far');
-  assert.equal(practiceTitle({ model, scene: 1, which: 'learning' }), 'Scene 1: The Harbour, lines still being learned');
+  assert.equal(practiceTitle({ model, scene: null, which: 'learned' }), 'All my lines, everything learnt so far');
+  assert.equal(practiceTitle({ model, scene: 1, which: 'learning' }), 'Scene 1: The Harbour, lines still being learnt');
   assert.equal(practiceTitle({ model, scene: 0, which: 'all' }), 'Prologue, every line');
 });
 

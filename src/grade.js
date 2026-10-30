@@ -57,6 +57,13 @@ export function createTypeCheck(tokens) {
   };
 }
 
+// A line of this many words or more can have a slip of the finger; on a shorter one a key is too
+// much of the line to wave through.
+export const SLIP_WORDS = 4;
+
+// One wrong key, touching the right one, and nothing else wrong: he may say it was only a slip.
+export const onlySlip = (check, words, speakerWrong = false) => !speakerWrong && words >= SLIP_WORDS && check.misses.length === 1 && check.slips.includes(check.misses[0]);
+
 export function sayMisses(tokens, tapped) {
   return [...tapped].filter((i) => tokens[i] && tokens[i].k !== null).sort((a, b) => a - b);
 }
@@ -98,5 +105,5 @@ export function repeatMisses(events, id, misses) {
 
 export function troubleNote(tokens, indices) {
   if (!indices.length) return null;
-  return `Missed here before as well: ${indices.slice(0, 5).map((i) => bare(tokens[i].d)).join(', ')}.`;
+  return `Tricky words for you: ${indices.slice(0, 5).map((i) => bare(tokens[i].d)).join(', ')}.`;
 }

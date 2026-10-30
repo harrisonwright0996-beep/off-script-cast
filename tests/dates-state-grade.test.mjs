@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { dayKey, addDays, daysBetween, weekday, formatDay, dayEnd } from '../src/dates.js';
 import { newState, applyResult, applyHelp, needsTeaching, category, isSecure, isWordPerfect } from '../src/state.js';
-import { createTypeCheck, sayMisses, makeResult, describeResult, neighbours, repeatMisses, troubleNote } from '../src/grade.js';
+import { createTypeCheck, sayMisses, makeResult, describeResult, neighbours, repeatMisses, troubleNote, onlySlip } from '../src/grade.js';
 import { tokenize } from '../src/tokens.js';
 
 test('the day starts at 03:00 local time', () => {
@@ -114,6 +114,27 @@ test('type check: a wrong key next to the right one may be a slip of the finger;
   assert.deepEqual([r.pass, r.slip], [true, true]);
 });
 
+test('a slip of the finger is one wrong key touching the right one, on a line of 4 words or more', () => {
+  const tokens = (word) => word.split('').map((k) => ({ k, d: k, a: ' ' }));
+  const run = (keys, line = 'tide') => {
+    const c = createTypeCheck(tokens(line));
+    for (const k of keys) c.press(k);
+    return c;
+  };
+  assert.equal(onlySlip(run('ride'), 4), true, 'r touches t');
+  assert.equal(onlySlip(run('tudf'), 4), false, 'two wrong keys');
+  assert.equal(onlySlip(run('zide'), 4), false, 'z does not touch t');
+  assert.equal(onlySlip(run('tide'), 4), false, 'nothing wrong');
+  assert.equal(onlySlip(run('rid', 'tid'), 3), false, 'too short a line');
+  assert.equal(onlySlip(run('ride'), 4, true), false, 'the wrong speaker as well');
+  const c = createTypeCheck(tokens('tide'));
+  c.press('t');
+  c.reveal();
+  c.press('d');
+  c.press('e');
+  assert.equal(onlySlip(c, 4), false, '? is never a slip');
+});
+
 test('trouble words: the words missed now that were missed in the same line before', () => {
   const tokens = tokenize('I said I would, and I will.');
   const events = [
@@ -125,8 +146,8 @@ test('trouble words: the words missed now that were missed in the same line befo
   assert.deepEqual(repeatMisses(events, 'a', [2, 4]), [4]);
   assert.deepEqual(repeatMisses(events, 'a', [2]), []);
   assert.deepEqual(repeatMisses([], 'a', [4]), []);
-  assert.equal(troubleNote(tokens, [4]), 'Missed here before as well: and.');
-  assert.equal(troubleNote(tokens, [1, 4]), 'Missed here before as well: said, and.');
+  assert.equal(troubleNote(tokens, [4]), 'Tricky words for you: and.');
+  assert.equal(troubleNote(tokens, [1, 4]), 'Tricky words for you: said, and.');
   assert.equal(troubleNote(tokens, []), null);
 });
 

@@ -136,7 +136,7 @@ for (const theme of ['stage', 'cream', 'light', 'dark']) {
     await page.evaluate(() => window.offScript.events.push({ time: Date.now() - 86400000, day: '2026-10-25', id: window.offScript.card.item.id, pass: false, mode: 'type', misses: 1, missed: [0] }));
     await page.keyboard.type('e' + keys.slice(1)); // e touches w
     await expect(page.getByRole('button', { name: 'A slip of the finger? Count it right' })).toBeVisible();
-    await expect(page.getByText('Missed here before as well: We.')).toBeVisible();
+    await expect(page.getByText('Tricky words for you: We.')).toBeVisible();
     await check(page, 'card: a slip, missed before', found);
     await page.getByRole('button', { name: 'A slip of the finger? Count it right' }).click();
     await expect(page.locator('.result.perfect')).toHaveText(/Counted right: a slip of the finger/);

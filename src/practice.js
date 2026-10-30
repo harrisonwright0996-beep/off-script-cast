@@ -10,7 +10,7 @@ const KEEP = {
   learned: (s) => s.status === 'review',
   all: () => true,
 };
-const NAMES = { learning: 'lines still being learned', learned: 'everything learned so far', all: 'every line' };
+const NAMES = { learning: 'lines still being learnt', learned: 'everything learnt so far', all: 'every line' };
 
 export function practiceLines({ model, getState, scene = null, which }) {
   return model.items.filter((it) => (scene === null || it.scene === scene) && KEEP[which](getState(it.id))).map((it) => it.id);

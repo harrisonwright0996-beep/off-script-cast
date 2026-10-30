@@ -398,3 +398,13 @@ test('time spent: the sprint clock where an answer has it, so reading lines befo
   ];
   assert.deepEqual(activeTime(events).map((x) => x.sec), [30, 380, 10, 20]);
 });
+
+test('ready lines say which are ready only because of the date', () => {
+  const app = fakeApp();
+  const ids = app.model.items.map((it) => it.id);
+  learn(app, ids.slice(0, 2), { stability: 500, hoursAgo: 96 });
+  learn(app, ids.slice(2, 4), { stability: 1, hoursAgo: 96 });
+  const { ready } = app.plan();
+  assert.deepEqual([...ready.keys()].sort(), ids.slice(0, 4).sort());
+  assert.deepEqual([...ready.forced].sort(), ids.slice(0, 2).sort());
+});
