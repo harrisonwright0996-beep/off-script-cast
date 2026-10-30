@@ -29,8 +29,9 @@ export async function openStore(name = DB) {
     if (!db.objectStoreNames.contains('audio')) db.createObjectStore('audio');
   };
   const db = await req(open);
+  db.onversionchange = () => db.close(); // another tab is removing everything: never stand in its way
 
-  const one = (store, mode, fn) => {
+  const one =(store, mode, fn) => {
     const tx = db.transaction(store, mode);
     const result = fn(tx.objectStore(store));
     return done(tx).then(() => (result && 'result' in result ? result.result : undefined));
@@ -135,8 +136,21 @@ export async function openStore(name = DB) {
     clearAudio: () => one('audio', 'readwrite', (s) => s.clear()),
 
     async removeEverything() {
+      // Emptied first: if a tab on an older version blocks the delete, Safari drops it at the reload.
+      try {
+        const tx = db.transaction([...db.objectStoreNames], 'readwrite');
+        for (const s of tx.objectStoreNames) tx.objectStore(s).clear();
+        await done(tx);
+      } catch {
+        // another tab has closed this connection to remove everything itself
+      }
       db.close();
-      await req(indexedDB.deleteDatabase(name));
+      await new Promise((resolve, reject) => {
+        const del = indexedDB.deleteDatabase(name);
+        del.onsuccess = () => resolve();
+        del.onerror = () => reject(del.error);
+        del.onblocked = () => resolve();
+      });
     },
   };
 }

@@ -1,12 +1,14 @@
 // The cast's one small server. It hands sealed packs to phones that have the company code, and sends
 // reminders. It never sees a name, a line or a message: packs are sealed before they get here, it
 // holds only a hash of the token, and a reminder is an empty push; the phone writes the words.
-// KV: file:<name> sealed bytes; sub:<id> { endpoint, nextAt, tries }, with nextAt in the metadata;
-// bad:<address> wrong tokens this hour. Secrets: TOKEN_HASH, VAPID_PUBLIC, VAPID_PRIVATE_JWK, VAPID_SUB.
-const BAD_MAX = 10;
+// KV: file:<name> sealed bytes; sub:<id> { endpoint, nextAt, tries }, with nextAt in the metadata.
+// LIMIT: a rate limit by address, for wrong tokens and new subscriptions; it stores nothing here.
+// Secrets: TOKEN_HASH, VAPID_PUBLIC, VAPID_PRIVATE_JWK, VAPID_SUB. CLOSED = '1' after the show: every
+// /f/ request answers 410, so each phone learns the pack is gone.
 const HOUR = 3600;
 const DAY = 86400000;
 const RETRY_DAYS = [2, 3]; // after a reminder that was not opened; then it stops
+const MAX_TICK = 40; // the free plan allows 50 fetches a run
 const PUSH_HOSTS = /^https:\/\/(web\.push\.apple\.com|fcm\.googleapis\.com|[a-z0-9.-]+\.push\.services\.mozilla\.com|[a-z0-9.-]+\.notify\.windows\.com)\//;
 
 const b64url = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -33,15 +35,13 @@ export function inWindow(now) {
   return weekend ? minutes >= 600 && minutes < 1200 : minutes >= 960 && minutes < 1230;
 }
 
+const withinLimit = async (request, env) => (await env.LIMIT.limit({ key: request.headers.get('cf-connecting-ip') || 'unknown' })).success;
+
+// The right token always passes, whatever has happened on that address.
 async function authorised(request, env) {
-  const address = request.headers.get('cf-connecting-ip') || 'unknown';
-  const key = `bad:${await sha256(address)}`;
-  const bad = Number((await env.KV.get(key)) || 0);
-  if (bad >= BAD_MAX) return { ok: false, status: 429 };
   const token = request.headers.get('x-cast-token') || '';
   if ((await sha256(token)) === env.TOKEN_HASH) return { ok: true };
-  await env.KV.put(key, String(bad + 1), { expirationTtl: HOUR });
-  return { ok: false, status: 401 };
+  return { ok: false, status: (await withinLimit(request, env)) ? 401 : 429 };
 }
 
 const putSub = (env, id, sub) => env.KV.put(`sub:${id}`, JSON.stringify(sub), { metadata: { nextAt: sub.nextAt } });
@@ -51,7 +51,9 @@ export async function handle(request, env) {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: head });
   const url = new URL(request.url);
   const reply = (status, body = null, extra = {}) => new Response(body, { status, headers: { ...head, ...extra } });
-  const known = /^\/f\/[A-Za-z0-9_-]{1,64}$/.test(url.pathname) || /^\/push\/(sub|next|off)$/.test(url.pathname);
+  // After the show. A preflight above still passes, or the browser would never see this answer.
+  if (env.CLOSED === '1' && url.pathname.startsWith('/f/')) return reply(410);
+  const known =/^\/f\/[A-Za-z0-9_-]{1,64}$/.test(url.pathname) || /^\/push\/(sub|next|off)$/.test(url.pathname);
   if (!known) return reply(404);
   const who = await authorised(request, env);
   if (!who.ok) return reply(who.status);
@@ -67,7 +69,7 @@ export async function handle(request, env) {
   } catch {
     return reply(400);
   }
-  if (typeof body.id !== 'string' || !/^[a-f0-9]{32}$/.test(body.id)) return reply(400);
+  if (typeof body?.id !== 'string' || !/^[a-f0-9]{32}$/.test(body.id)) return reply(400);
   if (url.pathname === '/push/off') {
     await env.KV.delete(`sub:${body.id}`);
     return reply(204);
@@ -75,6 +77,7 @@ export async function handle(request, env) {
   if (!Number.isFinite(body.nextAt)) return reply(400);
   if (url.pathname === '/push/sub') {
     if (typeof body.endpoint !== 'string' || !PUSH_HOSTS.test(body.endpoint)) return reply(400);
+    if (!(await withinLimit(request, env))) return reply(429);
     await putSub(env, body.id, { endpoint: body.endpoint, nextAt: body.nextAt, tries: 0 });
     return reply(204);
   }
@@ -105,23 +108,30 @@ async function allSubs(env) {
   return keys;
 }
 
-// Every 15 minutes: any reminder that is due and may go out now.
+// One reminder. The new state is saved first, so a failure here cannot send it again every tick; a
+// bad moment at the push service waits for the next try. Returns whether it went.
+async function remind(env, name, now, send) {
+  const sub = await env.KV.get(name, 'json');
+  if (!sub) return false;
+  if (sub.tries >= RETRY_DAYS.length) await env.KV.delete(name); // not opened three times: stop
+  else await putSub(env, name.slice('sub:'.length), { ...sub, nextAt: now + RETRY_DAYS[sub.tries] * DAY, tries: sub.tries + 1 });
+  const res = await send(sub.endpoint, { method: 'POST', headers: { Authorization: await vapid(sub.endpoint, env, now), TTL: '86400', Urgency: 'normal', 'Content-Length': '0' } });
+  if (res.status >= 400 && res.status < 500 && res.status !== 429) await env.KV.delete(name); // the phone has said no, or gone
+  return res.ok;
+}
+
+// Every 15 minutes: the reminders that are due and may go out now, oldest first. Any left over wait
+// for the next tick. One that throws never stops the others.
 export async function tick(env, now, send = fetch) {
   if (!inWindow(now)) return 0;
+  const due = (await allSubs(env)).filter(({ metadata }) => metadata && metadata.nextAt <= now).sort((a, b) => a.metadata.nextAt - b.metadata.nextAt).slice(0, MAX_TICK);
   let sent = 0;
-  for (const { name, metadata } of await allSubs(env)) {
-    if (!metadata || metadata.nextAt > now) continue;
-    const sub = await env.KV.get(name, 'json');
-    if (!sub) continue;
-    const res = await send(sub.endpoint, { method: 'POST', headers: { Authorization: await vapid(sub.endpoint, env, now), TTL: '86400', Urgency: 'normal', 'Content-Length': '0' } });
-    if (res.status === 404 || res.status === 410) {
-      await env.KV.delete(name); // the phone has said no, or gone
-      continue;
+  for (const { name } of due) {
+    try {
+      if (await remind(env, name, now, send)) sent += 1;
+    } catch {
+      // the state is saved: this one waits for its next try
     }
-    if (!res.ok) continue; // the push service had a bad moment: the next tick tries again
-    sent += 1;
-    if (sub.tries >= RETRY_DAYS.length) await env.KV.delete(name); // not opened three times: stop
-    else await env.KV.put(name, JSON.stringify({ ...sub, nextAt: now + RETRY_DAYS[sub.tries] * DAY, tries: sub.tries + 1 }), { metadata: { nextAt: now + RETRY_DAYS[sub.tries] * DAY } });
   }
   return sent;
 }

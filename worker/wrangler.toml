@@ -8,7 +8,13 @@ crons = ["*/15 * * * *"]
 
 [vars]
 ORIGIN = "https://harrisonwright0996-beep.github.io"
+# After the show, add CLOSED = "1" here and deploy: every phone then learns the pack is gone.
 
 [[kv_namespaces]]
 binding = "KV"
 id = "0b2b60a5b3c94fb58796256f033661c2"
+
+[[ratelimits]]
+name = "LIMIT"
+namespace_id = "1001"
+simple = { limit = 10, period = 60 }
