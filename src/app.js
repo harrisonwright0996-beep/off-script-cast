@@ -6,20 +6,31 @@ import { newState } from './state.js';
 import { buildPlan } from './plan.js';
 import { fitFactor } from './memory.js';
 import { dayKey, addDays } from './dates.js';
-import { clear, focusHeading } from './ui/dom.js';
+import { h, button, clear, screen, focusHeading, settled } from './ui/dom.js';
 import { showInstall, needsInstall } from './ui/install.js';
 import { showUnlock } from './ui/unlock.js';
 import { showCheckin } from './ui/checkin.js';
 import { showStage } from './ui/stage.js';
 import { showSprint } from './ui/sprint.js';
 import { showScenes, showReader } from './ui/scenes.js';
-import { showSettings } from './ui/settings.js';
+import { showSettings, wipePhone } from './ui/settings.js';
 import { showWalk } from './ui/walk.js';
 import { showChoose } from './ui/choose.js';
 import { showStartAgain } from './ui/again.js';
+import { learntPercent } from './cast/proof.js';
+import { ENDS } from './cast/config.js';
 
-const SCREENS = { install: showInstall, unlock: showUnlock, checkin: showCheckin, today: showStage, sprint: showSprint, scenes: showScenes, reader: showReader, settings: showSettings, walk: showWalk, choose: showChoose, again: showStartAgain };
 const EVENT_DAYS = 9; // the plan looks back this far
+const DB = 'off-script-cast';
+
+// The show is over: nothing of it stays on the phone.
+async function showEnded(ctx) {
+  await wipePhone(ctx);
+  Object.assign(ctx, { model: null, index: null, states: new Map(), events: [], manifest: null, keys: null, member: null });
+  ctx.root.append(screen({ title: 'Off Script', body: [h('p', { class: 'lead' }, 'The show is over, so your lines have been removed from this phone. Well done.')] }));
+}
+
+const SCREENS = { install: showInstall, unlock: showUnlock, checkin: showCheckin, today: showStage, sprint: showSprint, scenes: showScenes, reader: showReader, settings: showSettings, walk: showWalk, choose: showChoose, again: showStartAgain, ended: showEnded };
 
 export function applyLook(s) {
   const root = document.documentElement;
@@ -31,8 +42,10 @@ export function applyLook(s) {
   root.style.setProperty('--ws', spacing[1]);
 }
 
+let store = null; // kept outside boot, so a phone that cannot start can still be cleared
+
 async function boot() {
-  const store = await openStore();
+  store = await openStore();
   const ctx = {
     store,
     root: document.getElementById('app'),
@@ -76,6 +89,14 @@ async function boot() {
       await store.set('script', model);
       await store.set('scriptMeta', meta);
       await store.del('sprint');
+      await ctx.settleSeen();
+    },
+
+    // The % has moved for a reason that is not a slip (a new script, Start again, a backup), so the
+    // next Your lines has no dip to explain.
+    async settleSeen() {
+      const seen = await store.get('seen');
+      if (seen) await store.set('seen', { ...seen, percent: learntPercent(ctx.model, ctx.getState) });
     },
 
     async saveAnswer(rec) {
@@ -97,6 +118,7 @@ async function boot() {
       ctx.states = gone ? new Map([...ctx.states].filter(([id]) => !gone.has(id))) : new Map();
       ctx.events = gone ? ctx.events.filter((e) => !gone.has(e.id)) : [];
       ctx.refit();
+      await ctx.settleSeen();
     },
 
     async saveSettings(patch) {
@@ -126,13 +148,15 @@ async function boot() {
   window.offScript = ctx; // handy when testing; holds nothing that leaves the phone
 
   applyLook(ctx.settings);
+  registerServiceWorker(ctx);
+  if (ctx.today() > ENDS) return ctx.go('ended');
+
   const model = await store.get('script');
   if (model) {
     ctx.model = model;
     ctx.index = indexModel(model);
     for (const s of await store.allStates()) ctx.states.set(s.id, s);
   }
-  registerServiceWorker(ctx);
 
   if (needsInstall()) return ctx.go('install');
   return ctx.go(model ? 'today' : 'unlock');
@@ -161,8 +185,36 @@ function registerServiceWorker(ctx) {
     .catch(() => {});
 }
 
+// What is on the phone may be why it cannot start, so this must work with no help from it.
+async function removeAndRestart() {
+  try {
+    store = store || (await openStore());
+    await wipePhone({ store, keys: await store.get('keys') });
+  } catch {
+    indexedDB.deleteDatabase(DB);
+    try {
+      localStorage.clear();
+    } catch {
+      // nothing stored there
+    }
+  }
+  location.reload();
+}
+
+function couldNotStart(root) {
+  const draw = (title, body, footer) => {
+    clear(root).append(screen({ title, body, footer }));
+    focusHeading(root);
+  };
+  const sure = () =>
+    draw('Remove everything?', [h('p', { class: 'lead' }, 'This deletes your lines, your progress and the audio from this phone. You would need the company code to get them back.')], [
+      button('Keep everything', () => location.reload(), { class: 'btn primary' }),
+      button('Remove everything', settled(removeAndRestart)),
+    ]);
+  draw('Off Script could not start', [h('p', { class: 'lead' }, 'Close it and open it again. If this keeps happening, your phone may be short of space.'), h('p', {}, 'Still stuck? Removing everything from this phone can fix it.')], [button('Remove everything', settled(sure))]);
+}
+
 boot().catch((err) => {
-  const root = document.getElementById('app');
-  root.textContent = 'Off Script could not start. Close it and open it again. If this keeps happening, your phone may be short of space.';
+  couldNotStart(document.getElementById('app'));
   console.error(err);
 });

@@ -10,8 +10,9 @@ export function showScenes(ctx) {
   const focus = ctx.settings.focusScene;
   ctx.root.append(
     screen({
-      title: 'My lines',
+      title: 'Read my lines',
       back: () => ctx.go('today'),
+      backLabel: 'Your lines',
       footer: ctx.model.items.some((it) => ctx.getState(it.id).status === 'new') ? [button('Already know some? Check them', () => ctx.go('checkin'))] : [],
       body: [
         h(
@@ -24,7 +25,7 @@ export function showScenes(ctx) {
               button(
                 [
                   h('strong', {}, sc.heading),
-                  h('span', {}, `${sc.perfectSpeeches} of ${sc.speeches} speeches word perfect`),
+                  h('span', {}, `${sc.perfectSpeeches} of ${sc.speeches} lines word perfect`),
                   focus === sc.scene ? h('span', {}, 'Learning this scene next') : null,
                 ],
                 () => ctx.go('reader', { scene: sc.scene }),

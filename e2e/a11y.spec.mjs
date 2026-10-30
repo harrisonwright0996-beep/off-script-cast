@@ -81,18 +81,18 @@ for (const theme of ['stage', 'cream', 'light', 'dark']) {
     await check(page, 'choose', found);
     await page.getByLabel('Which lines').selectOption({ label: 'Every line' });
     await check(page, 'choose: every line', found);
-    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await page.getByRole('button', { name: 'Your lines', exact: true }).click();
     await page.getByRole('button', { name: 'Run through' }).click();
     await expect(page.getByRole('heading', { name: 'Run through' })).toBeVisible();
     await check(page, 'run through', found);
-    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await page.getByRole('button', { name: 'Your lines', exact: true }).click();
 
-    await page.getByRole('button', { name: 'My lines' }).click();
+    await page.getByRole('button', { name: 'Read my lines' }).click();
     await check(page, 'scenes', found);
     await page.getByRole('button', { name: /Scene 1: The Harbour/ }).click();
     await check(page, 'reader', found);
     await page.getByRole('button', { name: 'Back', exact: true }).click();
-    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await page.getByRole('button', { name: 'Your lines', exact: true }).click();
 
     await page.getByRole('button', { name: 'Settings' }).click();
     await check(page, 'settings', found);
@@ -103,12 +103,12 @@ for (const theme of ['stage', 'cream', 'light', 'dark']) {
     await check(page, 'start this scene again', found);
     await page.getByRole('button', { name: 'Keep its progress' }).click();
     await page.getByRole('button', { name: 'Back', exact: true }).click();
-    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await page.getByRole('button', { name: 'Your lines', exact: true }).click();
     await page.getByRole('button', { name: 'Settings' }).click();
     await page.getByRole('button', { name: 'Remove everything' }).click();
     await check(page, 'remove everything', found);
     await page.getByRole('button', { name: 'Keep everything' }).click();
-    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await page.getByRole('button', { name: 'Your lines', exact: true }).click();
 
     await page.getByRole('button', { name: 'Walk' }).click();
     await check(page, 'walk', found);
@@ -156,4 +156,31 @@ test('a first letters card with blanks, in every theme', async ({ page }) => {
     await check(page, `card: fewer first letters (${theme})`, found);
   }
   expect(found.filter((f) => f.impact === 'serious' || f.impact === 'critical')).toEqual([]);
+});
+
+// axe leaves out disabled controls and cannot judge a dot, so these are measured here.
+const contrast = (page, read) =>
+  page.evaluate((read) => {
+    const rgb = (c) => c.match(/[\d.]+/g).map(Number);
+    const lum = ([r, g, b]) => {
+      const f = (v) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const css = (el, key) => getComputedStyle(document.querySelector(el))[key];
+    const [a, b] = read === 'start' ? [css('.foot .btn[disabled]', 'color'), css('.foot .btn[disabled]', 'backgroundColor')] : [css('.lamp', 'borderTopColor'), css('.light', 'backgroundColor')];
+    const [hi, lo] = [lum(rgb(a)), lum(rgb(b))].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  }, read);
+
+test('a disabled Start can be read, and an unlit scene dot can be seen, in every theme', async ({ page }) => {
+  await importScript(page);
+  for (const theme of ['stage', 'cream', 'light', 'dark']) {
+    await page.evaluate((t) => window.offScript.saveSettings({ theme: t }), theme);
+    await page.evaluate(() => window.offScript.go('today'));
+    await expect(page.locator('.light-pc').first()).toHaveText('0%');
+    expect(await contrast(page, 'dot'), `dot in ${theme}`).toBeGreaterThanOrEqual(3);
+    await page.getByRole('button', { name: 'Choose' }).click();
+    await expect(page.getByRole('button', { name: 'Start' })).toBeDisabled();
+    expect(await contrast(page, 'start'), `Start in ${theme}`).toBeGreaterThanOrEqual(4.5);
+  }
 });
