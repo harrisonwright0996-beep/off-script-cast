@@ -5,7 +5,7 @@
 
 const ALNUM = /[\p{L}\p{N}]/u;
 const PAREN = /\([^)]*\)/g;
-const DASH_BETWEEN = /(?<=[\p{L}\p{N}])[-‐‑–—](?=[\p{L}\p{N}])/u;
+const DASH_BETWEEN = /([\p{L}\p{N}])([-‐‑–—])(?=[\p{L}\p{N}])/u;
 
 export function keyOf(word) {
   const m = word.match(ALNUM);
@@ -54,8 +54,9 @@ function splitOnDashes(chunk) {
   let rest = chunk;
   let m;
   while ((m = rest.match(DASH_BETWEEN))) {
-    parts.push({ text: rest.slice(0, m.index), dash: m[0] });
-    rest = rest.slice(m.index + 1);
+    const at = m.index + m[1].length;
+    parts.push({ text: rest.slice(0, at), dash: m[2] });
+    rest = rest.slice(at + 1);
   }
   parts.push({ text: rest, dash: '' });
   return parts;

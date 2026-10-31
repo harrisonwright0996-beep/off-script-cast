@@ -25,6 +25,7 @@ export async function showCheckin(ctx, { intro = false } = {}) {
   const show = (title, body, footer, footerClass = '') => {
     quiet();
     clear(ctx.root).append(screen({ title, body, footer, footerClass, back: intro ? null : settled(() => ctx.go('today')) }));
+    window.scrollTo(0, 0); // each line starts at its cue
     focusHeading(ctx.root);
   };
 
@@ -73,6 +74,7 @@ export async function showCheckin(ctx, { intro = false } = {}) {
       const r = key === '?' ? check.reveal() : check.press(key);
       if (!r) return;
       markTried(item.id);
+      hint.remove();
       draw();
       keepInView(ctx.root, newestWord(line));
       announce(`${r.correct ? '' : 'Missed: '}${tokens[r.index].d}`);
@@ -80,13 +82,15 @@ export async function showCheckin(ctx, { intro = false } = {}) {
       quiet();
       saved(pos, missesInRow, item, makeResult({ misses: check.misses, mode: 'type', words: item.words }));
     });
+    const hint = h('p', { class: 'help type-hint' }, TYPE_HINT);
     show(
       ctx.model.scenes[item.scene].heading,
-      [lastResult(), h('p', { class: 'where' }, `Checking your lines: ${pos + 1} of ${queue.length}`), cueBlock(cueOf(ctx.index, item)), h('p', { class: 'speaker' }, item.speaker), line, h('p', { class: 'help' }, TYPE_HINT)],
-      [pad.el, button('That is enough, teach me', settled(finish), { class: 'btn link' })],
+      [lastResult(), h('p', { class: 'where' }, `Checking your lines: ${pos + 1} of ${queue.length}`), cueBlock(cueOf(ctx.index, item)), h('p', { class: 'speaker' }, item.speaker), hint, line, button('That is enough, teach me', settled(finish), { class: 'btn link' })],
+      [pad.el],
       'keyboard',
     );
     removeKeys = pad.remove;
+    keepInView(ctx.root, hint);
   }
 
   async function saved(pos, missesInRow, item, result) {
@@ -95,7 +99,8 @@ export async function showCheckin(ctx, { intro = false } = {}) {
       const time = Date.now();
       const prev = ctx.getState(item.id);
       const state = applyKnown(prev, { day: dayKey(new Date(time)), time });
-      await ctx.saveAnswer({ event: { time, day: state.lastDay, id: item.id, pass: true, mode: 'type', queue: 'known', misses: 0, speakerWrong: false, relearn: false, prev }, state });
+      const missed = result.misses.length ? { missed: [...result.misses] } : {};
+      await ctx.saveAnswer({ event: { time, day: state.lastDay, id: item.id, pass: true, mode: 'type', queue: 'known', misses: result.misses.length, speakerWrong: false, relearn: false, prev, ...missed }, state: { ...state, closeWord: result.misses[0] ?? null } });
     }
     const inRow = result.pass ? 0 : missesInRow + 1;
     last = { pass: result.pass, text: !result.pass ? 'Not this one yet. You will learn it.' : result.misses.length ? 'Nearly word perfect.' : 'Word perfect.' };

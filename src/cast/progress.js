@@ -1,34 +1,52 @@
 // What the director sees of a pupil: their numbers, the pack's coded name and their own name sealed
-// with the company code, never a line or a word missed. One row a person, as two can learn one part,
-// and the same row if they install again. Sent when they change. With no signal it waits: the next
-// try sends the latest.
+// with the company code, never a line or a word missed. One row a phone, under a random id kept on the
+// phone, so no one else can work it out and write over it. Sent when they change. With no signal it
+// waits: the next try sends the latest.
 import { post } from './client.js';
-import { sealText, tokenHash } from './pack.js';
-import { fadingCount, isLearnt, learntPercent } from './proof.js';
+import { sealText } from './pack.js';
+import { fadingCount, isLearnt, learntPercent, onWayCount } from './proof.js';
+
+const ROW = 'progressId';
 
 export function progressOf(ctx) {
-  const days = [...ctx.states.values()].map((s) => s.lastDay).filter(Boolean).sort();
+  const days = [...ctx.states.values()].flatMap((s) => [s.lastDay, s.walkDay]).filter(Boolean).sort();
   return {
     pack: ctx.member.file,
     percent: learntPercent(ctx.model, ctx.getState),
     learnt: ctx.model.items.filter((it) => isLearnt(ctx.getState(it.id))).length,
     total: ctx.model.items.length,
     fading: fadingCount(ctx.plan().ready, ctx.getState),
-    lastDay: days.at(-1) ?? null,
+    onWay: onWayCount(ctx.model, ctx.getState),
+    lastDay: days.length ? days[days.length - 1] : null,
   };
 }
 
+const randomId = () => [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
+
+let sending = false; // the app asks often: one at a time
+
 export async function report(ctx) {
+  if (sending) return;
+  sending = true;
   try {
     const name = await ctx.store.get('myName');
     if (!ctx.keys || !ctx.member?.file || !name) return;
-    const id = (await tokenHash(`${ctx.keys.token}|${ctx.member.file}|${name.toLowerCase()}`)).slice(0, 32);
+    let id = await ctx.store.get(ROW);
+    if (!id) await ctx.store.set(ROW, (id = randomId()));
     const row = { id, ...progressOf(ctx) };
-    const said = JSON.stringify(row);
+    const said = JSON.stringify({ ...row, name });
     if (said === (await ctx.store.get('reported'))) return;
     const res = await post('/progress', ctx.keys.token, { ...row, who: await sealText(ctx.keys.key, name) });
     if (res.ok) await ctx.store.set('reported', said);
   } catch {
     // no signal: nothing to do
+  } finally {
+    sending = false;
   }
+}
+
+// Remove everything: the row goes from the director's page too.
+export async function forgetRow(ctx) {
+  const id = await ctx.store.get(ROW);
+  if (id && ctx.keys) await post('/progress/off', ctx.keys.token, { id });
 }

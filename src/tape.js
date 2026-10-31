@@ -10,8 +10,9 @@
 // first time its lines are asked for; its second run comes after the next beat's first. A beat part
 // learned hears only the lines still to be taught, as a sprint teaches only those, and is run whole.
 // While building, it assumes every recall is right; the real results are saved after the walk, at
-// the moments they were heard. A walk proves nothing, so a line not yet typed right stays being
-// learned, however many walks it passes (walkRecords).
+// the moments they were heard. A walk proves nothing: nobody hears whether the line was said, so a
+// pass only records that the line was walked (walkRecords). A line is taught on the first walk that
+// reaches it, and each walk starts from the beats walked least, so walking alone still moves on.
 import { applyResult, needsTeaching } from './state.js';
 import { beatStage, extraRunsOf, phaseOf, readyLines, testsOf, REVIEW_BURST } from './plan.js';
 import { dayKey } from './dates.js';
@@ -188,13 +189,19 @@ export function buildWalk({ model, index, manifest, getState, settings, plan, st
   // new line is asked for, a few minutes after it was heard. Its second run waits for the next beat
   // (or for the end of new beats). A beat is learned whole: if it and its second run do not fit, it
   // is left for another time.
+  // If it is too long for what is left of the walk, as many of its lines as fit are, up to half at a
+  // time; on a walk with nothing on it yet, at least one line.
   const learnBeat = (beat) => {
     const ids = beat.itemIds.filter(usable);
     if (!ids.length) return true;
+    for (let n = ids.length; n >= 1; n = n === 1 ? 0 : Math.ceil(n / 2)) if (learnLines(beat, ids.slice(0, n))) return true;
+    return false;
+  };
+  const learnLines = (beat, ids) => {
     const mark = { steps: steps.length, trials: trials.length, parts: parts.length, teaching: teaching.length, guide: guide.length, heard: heard.length, t, lastLabel, told: { ...told }, sim: new Map(sim) };
     part(`New: ${heading(beat.scene)}`);
     let prev = null;
-    for (const id of ids.filter((x) => needsTeaching(stateOf(x)))) {
+    for (const id of ids.filter((x) => needsTeaching(stateOf(x)) && !stateOf(x).walks)) {
       const it = byId.get(id);
       const begin = t;
       step('listen');
@@ -223,7 +230,7 @@ export function buildWalk({ model, index, manifest, getState, settings, plan, st
     }
     sequence(ids, 'beat', false, true, true);
     const sec = t - from;
-    if (t + sec + (pending ? pending.sec : 0) > seconds && mark.trials > 0) {
+    if (t + sec + (pending ? pending.sec : 0) > seconds && (mark.trials > 0 || ids.length > 1)) {
       steps.length = mark.steps;
       trials.length = mark.trials;
       parts.length = mark.parts;
@@ -243,7 +250,8 @@ export function buildWalk({ model, index, manifest, getState, settings, plan, st
   };
 
   says('intro');
-  const beats = [...plan.newBeats, ...plan.ahead].filter((id) => beatById.has(id));
+  const walkedLeast = (id) => Math.min(...beatById.get(id).itemIds.map((x) => getState(x).walks || 0));
+  const beats = [...plan.newBeats, ...plan.ahead].filter((id) => beatById.has(id)).sort((a, b) => walkedLeast(a) - walkedLeast(b));
   const taught = new Set();
   const extraDone = new Set(); // an extra run of each scene at most once a tape
   let tests = 0;
@@ -281,6 +289,7 @@ export function buildWalk({ model, index, manifest, getState, settings, plan, st
   // Once "Your turn" has begun, a tap is for that line, never the one before.
   trials.forEach((tr, i) => {
     if (i + 1 < trials.length) tr.end = Math.min(tr.end, trials[i + 1].start);
+    else tr.end = t; // the closing words too
   });
   return { steps, trials, parts, teaching, guide, heard, duration: t, missing };
 }
@@ -330,7 +339,7 @@ export function resumePoint(tape, time) {
 
 // The part label playing now, for the lock screen.
 export function partAt(parts, time) {
-  let label = parts.length ? parts[0].label : '';
+  let label = '';
   for (const p of parts) if (p.start <= time) label = p.label;
   return label;
 }
@@ -372,10 +381,11 @@ export function walkResults(tape, rows, marked) {
 // at the moment its answer was heard. start: when the tape began playing (ms). Each event carries the
 // seconds of tape since the answer before (active), new lines heard in between included, so the
 // whole walk counts as practice. Rounded on the running total, so that however long the walk, they
-// add up to the tape time. A walk proves nothing: a pass on a line not yet learned and not yet typed
-// right is practice, and leaves the line as far along as it was, so a round still teaches it. A miss,
-// or a pass on a line already learned or typed, changes it as usual. A walk kept from days ago changes
-// nothing on a line answered since: what came later is the truer picture.
+// add up to the tape time. A walk proves nothing, and nobody hears whether the line was said: a pass
+// leaves the line's memory, its % and anything fading as they were, and only records the walk. A mark
+// is honest, so it costs no %: the line comes back sooner (less stability) and, if it was not yet
+// typed right, is relearned. A walk kept from days ago changes nothing on a line answered since: what
+// came later is the truer picture.
 export function walkRecords(results, { start, getState, k = 1 }) {
   const states = new Map();
   let prevAt = 0;
@@ -385,8 +395,12 @@ export function walkRecords(results, { start, getState, k = 1 }) {
     const day = dayKey(new Date(time));
     const prev = states.get(r.id) || getState(r.id);
     if (prev.lastTime != null && prev.lastTime > time) return [];
-    const practice = r.pass && prev.status !== 'review' && !prev.proved;
-    const state = practice ? { ...prev, status: 'learning', firstDay: prev.firstDay ?? day, lastDay: day, lastTime: time, lastMode: 'walk' } : applyResult(prev, { pass: r.pass, day, time, mode: 'walk', k });
+    const missed = () => {
+      const s = applyResult(prev, { pass: false, day, time, mode: 'walk', k, closeWord: prev.closeWord });
+      return prev.proved ? { ...s, proved: true, lastResult: 'pass' } : s;
+    };
+    const walked = () => ({ ...prev, status: prev.status === 'new' ? 'learning' : prev.status, firstDay: prev.firstDay ?? day, walks: (prev.walks || 0) + 1, walkDay: day });
+    const state = r.pass ? walked() : missed();
     states.set(r.id, state);
     const event = { time, day, id: r.id, pass: r.pass, mode: 'walk', queue: r.queue, misses: r.pass ? 0 : 1, speakerWrong: false, relearn: false, prev };
     if (r.tapeAt != null) {

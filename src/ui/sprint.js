@@ -123,6 +123,7 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     scope,
     custom: fresh ? practice : custom,
     saved: usable ? saved.state : null,
+    peeked: ctx.peeked,
   });
   const chosen = practice ? session.state.custom : null; // the chosen practice under way
   const startStats = { ...session.stats };
@@ -337,7 +338,7 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
                 b.append(h('span', { 'aria-hidden': 'true' }, ' ✓'), h('span', { class: 'visually-hidden' }, ' (right)'));
               } else if (b.textContent === name) {
                 b.classList.add('wrong');
-                b.append(h('span', { class: 'visually-hidden' }, ' (your choice)'));
+                b.append(h('span', { 'aria-hidden': 'true' }, ' ✕'), h('span', { class: 'visually-hidden' }, ' (your choice)'));
               }
             }
             announce(speakerWrong ? `It was ${item.speaker}` : item.speaker);
@@ -357,10 +358,10 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
       const check = createTypeCheck(tokens);
       const line = h('p', { class: 'line answer' });
       // Said or mouthed, a line is remembered better than in the head alone (the production effect).
-      const hint = h('p', { class: 'help' }, TYPE_HINT);
+      const hint = h('p', { class: 'help type-hint' }, TYPE_HINT);
       const draw = () => clear(line).append(...tokenView(tokens, check.shownUpTo, new Set(check.misses)));
       draw();
-      answerArea.append(line, hint);
+      answerArea.append(hint, line); // above the line, or the keypad would cover it on a small phone
       let firstMs;
       let missSaved = null;
       const pad = keypad((key) => {
@@ -385,12 +386,15 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
       removeKeys = pad.remove;
       clear(footBox).append(pad.el);
       foot.className = 'foot keyboard';
-      keepInView(ctx.root, line);
+      keepInView(ctx.root, hint);
     }
 
     function sayAnswer() {
       // The line on show, there is no typing it from memory now.
-      const onReveal = () => switchMode && switchMode.remove();
+      const onReveal = () => {
+        ctx.peek([item.id]);
+        if (switchMode) switchMode.remove();
+      };
       sayCheck(tokens, answerArea, footBox, 'Say it aloud, then reveal it.', (misses, ms) => finish(c, makeResult({ misses, speakerWrong, mode: 'say', ms, words: c.tested ? item.words : 0 })), onReveal);
     }
   }
@@ -561,8 +565,10 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
       );
     }
     const left = chosen ? linesLeft(session.state) : 0;
+    // A big part needs more than one round a day. Said lightly: there is no time to spend.
+    const more = !chosen && !custom && !ctx.plan().done ? h('p', {}, 'There is more ready for you today, if you have time.') : null;
     Promise.all([science(), reminderOffer(ctx)]).then(([note, offer]) =>
-      plain('Round done', [headline(said), left ? h('p', {}, `${plural(left, 'line')} of this ${chosen.run ? 'run through' : 'practice'} still to go.`) : null, offer, note], [
+      plain('Round done', [headline(said), left ? h('p', {}, `${plural(left, 'line')} of this ${chosen.run ? 'run through' : 'practice'} still to go.`) : null, more, offer, note], [
         left
           ? button('Carry on', act(() => ctx.go('sprint', { practice: 'resume' })), { class: 'btn primary' })
           : button('Another round', act(() => ctx.go('sprint')), { class: 'btn primary' }),
@@ -571,12 +577,13 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     );
   }
 
-  function planDone() {
+  async function planDone() {
     const st = done();
     const plan = ctx.plan();
     const said = st.answered ? h('p', {}, statsLine(st)) : null;
     if (chosen) {
-      return plain(chosen.run ? 'Run through done' : 'Practice done', [h('p', { class: 'lead' }, `${chosen.title}.`), said], [
+      const offer = await reminderOffer(ctx);
+      return plain(chosen.run ? 'Run through done' : 'Practice done', [h('p', { class: 'lead' }, `${chosen.title}.`), said, offer], [
         chosen.run
           ? button('Run through again', act(() => ctx.go('choose', { run: true })), { class: 'btn primary' })
           : button('Choose again', act(() => ctx.go('choose')), { class: 'btn primary' }),
@@ -584,7 +591,8 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
       ]);
     }
     if (custom) {
-      return plain('Run done', [h('p', { class: 'lead' }, `That was a run of ${heading(custom.scene)}.`), said], [
+      const offer = await reminderOffer(ctx);
+      return plain('Run done', [h('p', { class: 'lead' }, `That was a run of ${heading(custom.scene)}.`), said, offer], [
         button('Back to the scene', act(() => ctx.go('reader', { scene: custom.scene })), { class: 'btn primary' }),
         button('Back to your lines', act(() => ctx.go('today'))),
       ]);

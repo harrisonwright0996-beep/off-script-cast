@@ -279,14 +279,16 @@ test('a walk proves nothing: lines only left as all good stay being taught, and 
     assert.equal(s.status, 'learning');
     assert.ok(needsTeaching(s));
     assert.equal(s.proved, false);
-    assert.equal(s.lastMode, 'walk');
+    assert.ok(s.walks >= 2, 'its two runs at least');
   }
   assert.ok(app.model.beats.filter((b) => b.itemIds.some((id) => taught.includes(id))).every((b) => beatStage(b, app.getState) === 'learn'));
   assert.ok(records.every((rec) => rec.event.mode === 'walk'), 'the practice is still in the record');
-  assert.ok(walk(app, manifest, 3600).heard.some((x) => taught.includes(x.id)), 'the next walk teaches them again');
+  const next = walk(app, manifest, 3600);
+  assert.equal(next.heard.some((x) => taught.includes(x.id)), false, 'taught once: the next walk does not start them again');
+  assert.ok(next.trials.length > 0);
 });
 
-test('a line part way through being learned stays there; one typed or already learned moves as usual', () => {
+test('a walk pass changes nothing that counts, typed or not; a mark brings the line back sooner and costs no %', () => {
   const day = '2026-10-26';
   const time = new Date(`${day}T12:00:00`).getTime();
   const base = { ...newState('a'), status: 'learning', firstDay: day, passes: 1, passDays: [day], stability: 1, lastResult: 'pass', lastDay: day, lastTime: time - 3600000 };
@@ -294,9 +296,16 @@ test('a line part way through being learned stays there; one typed or already le
   const held = go(base);
   assert.equal(held.status, 'learning');
   assert.equal(held.passes, 1);
-  assert.equal(go({ ...base, proved: true }).status, 'review');
-  assert.equal(go({ ...base, status: 'review', learnedDay: day }).passes, 2);
+  assert.equal(held.walks, 1);
+  assert.equal(go({ ...base, proved: true }).status, 'learning');
+  const known = { ...base, status: 'review', learnedDay: day, passes: 4, stability: 24, proved: true, lastTime: time - 1000 };
+  const walked = go(known);
+  assert.deepEqual([walked.passes, walked.stability, walked.lastTime, walked.lastDay], [4, 24, known.lastTime, known.lastDay]);
+  const marked = go(known, false);
+  assert.deepEqual([marked.misses, marked.proved, marked.lastResult], [1, true, 'pass']);
+  assert.ok(marked.stability < 24);
   assert.equal(go(base, false).misses, 1);
+  assert.equal(go(base, false).lastResult, 'miss', 'not yet typed right: relearned as usual');
 });
 
 test('a role played as someone else is spoken in full, and only such roles are made', () => {

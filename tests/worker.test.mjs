@@ -28,7 +28,8 @@ function fakeKV() {
       if (!e) return null;
       return type === 'json' ? JSON.parse(e.v) : e.v;
     },
-    put: async (k, v, o = {}) => void m.set(k, { v, metadata: o.metadata }),
+    getWithMetadata: async (k) => ({ value: m.get(k)?.v ?? null, metadata: m.get(k)?.metadata ?? null }),
+    put: async (k, v, o = {}) => void m.set(k, { v, metadata: o.metadata, expiration: o.expiration }),
     delete: async (k) => void m.delete(k),
     list: async ({ prefix }) => ({ keys: [...m].filter(([k]) => k.startsWith(prefix)).map(([name, e]) => ({ name, metadata: e.metadata })), list_complete: true }),
   };
@@ -39,6 +40,7 @@ async function env() {
   return {
     KV: fakeKV(),
     LIMIT: fakeLimit(),
+    WRITES: fakeLimit(),
     ORIGIN: 'https://example.github.io',
     TOKEN_HASH: await tokenHash(TOKEN),
     VAPID_PUBLIC: 'pub',
@@ -84,12 +86,14 @@ test('a right token costs the limit nothing; a wrong guess writes nothing and ke
   assert.deepEqual([...e.LIMIT.seen.keys()], ['9.8.7.6']);
 });
 
-test('new subscriptions are limited by address, and a refused one is not stored', async () => {
+test('a whole class on one address can subscribe; only the much higher limit on writes applies', async () => {
   const e = await env();
+  e.WRITES.limit = async ({ key }) => ({ success: (e.WRITES.seen.set(key, (e.WRITES.seen.get(key) || 0) + 1), e.WRITES.seen.get(key) <= 120) });
   const sub = (id, ip) => call(e, '/push/sub', { method: 'POST', ip, body: { id, endpoint: APPLE, nextAt: AT } });
   assert.equal((await call(e, '/push/sub', { method: 'POST', body: { id: ID, endpoint: 'https://evil.example/x', nextAt: AT } })).status, 400);
-  assert.equal(e.LIMIT.seen.size, 0); // only one that would be stored counts
-  for (let i = 0; i < 10; i++) assert.equal((await sub(ID, '1.1.1.1')).status, 204);
+  for (let i = 0; i < 25; i++) assert.equal((await sub(ID, '1.1.1.1')).status, 204);
+  assert.equal(e.LIMIT.seen.size, 0);
+  e.WRITES.seen.set('1.1.1.1', 120);
   const other = 'e'.repeat(32);
   assert.equal((await sub(other, '1.1.1.1')).status, 429);
   assert.equal(e.KV.m.has(`sub:${other}`), false);
@@ -276,7 +280,10 @@ test('a phone reports its numbers with the company token, and nothing else is ke
     assert.equal((await call(e, '/progress', { method: 'POST', body: bad })).status, 400);
   }
   assert.equal((await call(e, '/progress', { method: 'POST', body: PROGRESS })).status, 204);
+  assert.equal((await call(e, '/progress', { method: 'POST', body: { ...PROGRESS, percent: 41 } })).status, 429, 'too soon after the last write');
+  e.KV.m.get(`prog:${PROGRESS.id}`).metadata.seen -= 6 * 60000;
   assert.equal((await call(e, '/progress', { method: 'POST', body: { ...PROGRESS, lastDay: null } })).status, 204);
+  assert.equal(e.KV.m.get(`prog:${PROGRESS.id}`).expiration, Date.UTC(2027, 1, 1) / 1000, 'nothing outlasts the app');
   const [{ metadata }] = (await e.KV.list({ prefix: 'prog:' })).keys;
   assert.equal(metadata.percent, 40);
   assert.equal(metadata.lastDay, null);

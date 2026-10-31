@@ -45,6 +45,7 @@ export async function showChoose(ctx, { run = false } = {}) {
   const summary = h('p', { class: 'lead' });
   const begin = button('Start', start, { class: 'btn primary' });
   const lines = () => practiceLines({ model, getState: ctx.getState, scene: pick.scene, which: pick.which });
+  if (!lines().length && !last.which) pick.which = 'all'; // nothing started yet: never open on an empty list
 
   // A choice: its list, and a line under it saying what the choice means.
   function field(key, label, options) {

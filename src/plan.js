@@ -101,7 +101,8 @@ export function readyLines({ model, getState, now, today, k, phase, proofs = fal
     if (s.status !== 'review' || knownToday(s, today)) continue;
     const r = s.lastResult === 'miss' ? 0 : recallNow(s, now, k) ?? 0;
     const stale = cap === 0 ? s.lastDay < today : daysBetween(s.lastDay, today) >= cap;
-    const going = r <= targetOf(openings, it.id) || (proofs && !s.proved);
+    // A line not yet typed right comes back on another day, when typing it can count.
+    const going = r <= targetOf(openings, it.id) || (proofs && !s.proved && s.lastDay < today);
     if (going || stale) ready.set(it.id, r);
     if (!going && stale) ready.forced.add(it.id);
   }

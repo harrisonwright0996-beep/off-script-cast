@@ -14,6 +14,13 @@ export function neighbours(a, b) {
   return !!p && !!q && a !== b && Math.abs(p.y - q.y) <= 1 && Math.abs(p.x - q.x) <= 1;
 }
 
+// Letters that are easily swapped by someone who knows the word: mirror images, and first sounds
+// spelt another way (one, know, write, phone, gem, city, hour). A first letter is there to show the
+// line was remembered, not spelt. Said digits count too: 2 is also t. The app never says so.
+const ALIKE = ['bd', 'pq', 'ck', 'cs', 'cq', 'kq', 'fp', 'gj', 'kn', 'rw', 'ow', 'ho', 'sz', 'xz', 'uy', 'o1', 't2', 't3', 'f4', 'f5', 's6', 's7', 'e8', 'n9', 'z0'];
+const ALIKE_KEYS = new Set(ALIKE.flatMap((p) => [p, p[1] + p[0]]));
+export const sameKey = (a, b) => a === b || ALIKE_KEYS.has(a + b);
+
 export function createTypeCheck(tokens) {
   const keyed = [];
   tokens.forEach((t, i) => {
@@ -48,7 +55,7 @@ export function createTypeCheck(tokens) {
     press(key) {
       if (pos >= keyed.length) return null;
       const k = String(key).toLowerCase();
-      return step(k === tokens[keyed[pos]].k, k);
+      return step(sameKey(k, tokens[keyed[pos]].k), k);
     },
     reveal() {
       if (pos >= keyed.length) return null;

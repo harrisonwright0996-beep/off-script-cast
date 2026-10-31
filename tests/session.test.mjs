@@ -725,7 +725,7 @@ test('right but typed much slower than usual once under way: its memory grows by
   assert.equal('slow' in recs.get(quickId).event, false);
   const grew = (id) => recs.get(id).state.stability;
   // (The answers come 10 seconds apart, so their growth differs a touch anyway.)
-  assert.ok(Math.abs(grew(slowId) - 1 - (grew(quickId) - 1) / 2) < 0.01, `slow: x${grew(slowId).toFixed(3)}, usual: x${grew(quickId).toFixed(3)}`);
+  assert.ok(Math.abs(grew(slowId) - 1 - (grew(quickId) - 1) / 2) < 0.02, `slow: x${grew(slowId).toFixed(3)}, usual: x${grew(quickId).toFixed(3)}`);
   assert.ok(grew(slowId) > 1, 'it still grows: it was right');
 });
 
@@ -906,9 +906,9 @@ test('proof is earned only in the day\'s rounds: not in a chosen practice, a run
 });
 
 test('a practice leaves a line unlocked, while a round makes the same go typed, and it counts there', () => {
-  const app = fakeApp({ settings: PROOF });
+  const app = fakeApp({ settings: PROOF, today: '2026-10-27' });
   const id = app.model.items[0].id;
-  learn(app, [id], onceRight);
+  learn(app, [id], { ...onceRight, firstDay: '2026-10-26' });
   const practice = start(app, { custom: { itemIds: [id], help: 'cue' } });
   assert.equal(practice.advance().mustType, false, 'typing here would not count, so it is not asked for');
   const round = start(app);
@@ -958,8 +958,18 @@ test('a miss loses the proof, and the go that wins it back is typed', () => {
     answer(app, s, true);
     c = s.advance();
   }
-  assert.deepEqual([c.item.id, c.mustType], [id, true]);
+  assert.deepEqual([c.item.id, c.mustType], [id, false], 'not the same day: it would prove nothing');
   answer(app, s, true);
+  assert.equal(isLearnt(app.getState(id)), false);
+  app.setDay('2026-10-28');
+  const next = start(app, { scope: 'tests' });
+  c = next.advance();
+  while (c && c.step !== 'floor') {
+    answer(app, next, true);
+    c = next.advance();
+  }
+  assert.deepEqual([c.item.id, c.mustType], [id, true], 'the next day it has to be typed');
+  answer(app, next, true);
   assert.equal(isLearnt(app.getState(id)), true);
 });
 

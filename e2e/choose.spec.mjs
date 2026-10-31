@@ -14,7 +14,9 @@ test('choose what to practise: a scene, every line, read it first; stopped part 
   await importScript(page);
   await page.getByRole('button', { name: 'Choose' }).click();
   await expect(page.getByRole('heading', { name: 'Choose' })).toBeVisible();
-  await expect(page.getByText('No lines match these choices. Try Every line.')).toBeVisible(); // nothing started yet
+  await expect(page.getByRole('button', { name: 'Start' })).toBeEnabled(); // nothing started yet: never opens on an empty list
+  await page.getByLabel('Which lines').selectOption({ label: 'Lines still being learnt' });
+  await expect(page.getByText('No lines match these choices. Try Every line.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start' })).toBeDisabled();
   await page.getByLabel('Where').selectOption({ label: 'Scene 1: The Harbour' });
   await page.getByLabel('Which lines').selectOption({ label: 'Every line' });
@@ -41,7 +43,7 @@ test('choose what to practise: a scene, every line, read it first; stopped part 
 
   // The day's sprint is its own: the line that practice started has its go first, as any line under way does.
   await page.getByRole('button', { name: 'Stop' }).click();
-  await page.getByRole('button', { name: 'Start learning' }).click();
+  await page.getByRole('button', { name: 'Next round' }).click();
   await expect(page.getByRole('heading', { name: 'Learning', exact: true })).toBeVisible();
 });
 

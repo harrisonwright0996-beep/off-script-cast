@@ -7,6 +7,7 @@ import { sync } from '../cast/reminders.js';
 import { reminderOffer } from './offer.js';
 import { scienceNote } from '../cast/science.js';
 import { applyWaitingPack, askName, refreshPack } from './unlock.js';
+import { ENDS } from '../cast/config.js';
 
 const MOMENTS = {
   25: 'A quarter of your lines learnt. The lights are coming up.',
@@ -14,8 +15,9 @@ const MOMENTS = {
   75: 'Three quarters learnt. The end is in sight.',
   100: 'Every line learnt. Amazing work.',
 };
-const DIPPED = 'Your % dipped because a line slipped. That is normal. Get it right again and it comes back.';
+const DIPPED = 'Your % dipped because a line slipped. That is normal. Get it right again on another day and it comes back.';
 const AT_ZERO = 'Every line starts here. Your % grows as you learn.';
+const ON_WAY = 'Your lines are on their way. Each one counts towards your % once you can still do it on another day.';
 
 export function lightsOf(lights) {
   return h(
@@ -37,25 +39,36 @@ export function showStage(ctx) {
   let refreshed = false;
   let dipped = false; // these stay said for as long as this screen is up
   let updated = false;
+  let asking = false;
 
   const nav = ctx.nav;
 
   async function render() {
     if (ctx.nav !== nav) return;
-    if (ctx.member && !(await ctx.store.get('myName'))) return askName(ctx, render);
+    if (asking) return; // what they are typing stays
+    if (ctx.member && !(await ctx.store.get('myName'))) {
+      asking = true;
+      return askName(ctx, () => {
+        asking = false;
+        render();
+      });
+    }
     await applyWaitingPack(ctx).catch(() => {});
     updated = updated || ctx.linesUpdated;
     ctx.linesUpdated = false;
     await ctx.refreshEvents();
+    ctx.refit();
     const plan = ctx.plan();
     const percent = learntPercent(ctx.model, ctx.getState);
     const lights = sceneLights(ctx.model, ctx.getState);
     const fading = fadingCount(plan.ready, ctx.getState);
     const seen = (await ctx.store.get('seen')) || { percent: 0, lit: [], notes: 0 };
+    const started = [...ctx.states.values()].some((s) => s.status !== 'new');
     const body = [];
 
     if (ctx.update) body.push(h('div', { class: 'notice' }, h('p', {}, 'A new version is ready.'), button('Update now', () => ctx.applyUpdate(), { class: 'btn' })));
     if (updated) body.push(h('p', { class: 'message', role: 'status' }, 'Your lines have been updated.'));
+    if (ctx.memberGone) body.push(h('p', { class: 'message' }, 'These lines are no longer on the cast list. Ask your director.'));
     if (ctx.member) body.push(h('p', { class: 'who' }, `Learning as ${ctx.member.name}`));
 
     // Each moment comes once ever, however the % goes up and down. A scene lit shows beside a
@@ -73,7 +86,7 @@ export function showStage(ctx) {
 
     dipped = dipped || percent < seen.percent;
     if (dipped) body.push(h('p', { class: 'fading' }, DIPPED));
-    else if (percent === 0) body.push(h('p', { class: 'fading' }, AT_ZERO));
+    else if (percent === 0) body.push(h('p', { class: 'fading' }, started ? ON_WAY : AT_ZERO));
 
     if (fading) body.push(h('p', { class: 'fading' }, 'Some lines are ready for another go.'));
     else if (percent >= 100) body.push(h('p', { class: 'fading' }, 'You know every line. Keep them: lines fade if you stop using them.'));
@@ -89,7 +102,7 @@ export function showStage(ctx) {
       ? run({ class: 'btn primary' })
       : plan.done
         ? button('Learn more now', () => ctx.go('sprint', { extra: 'new' }), { class: 'btn primary' })
-        : button(percent ? 'Next round' : 'Start learning', () => ctx.go('sprint'), { class: 'btn primary' });
+        : button(started ? 'Next round' : 'Start learning', () => ctx.go('sprint'), { class: 'btn primary' });
     const footer = [
       main,
       h('div', { class: 'row' }, button('Walk', () => ctx.go('walk')), plan.done ? null : button('Quick round', () => ctx.go('sprint', { scope: plan.tests.length ? 'tests' : 'all', minutes: 2 }))),
@@ -116,7 +129,9 @@ export function showStage(ctx) {
   // Drawing again drops the focus, so it goes to the top.
   const redraw = () => render().then(() => ctx.nav === nav && focusHeading(ctx.root));
   const onVisible = () => {
-    if (document.visibilityState === 'visible') redraw();
+    if (document.visibilityState !== 'visible') return;
+    if (ctx.today() > ENDS) ctx.go('ended');
+    else redraw();
   };
   const onUpdate = () => redraw();
   document.addEventListener('visibilitychange', onVisible);

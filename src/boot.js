@@ -16,7 +16,7 @@
     var words = document.createElement('p');
     words.className = 'lead';
     words.setAttribute('role', 'alert');
-    words.textContent = 'Check your signal and try again. If it keeps happening, your phone may need updating.';
+    words.textContent = 'Check your signal and try again. If it keeps happening, this phone may be too old for Off Script. Ask your director.';
     var body = document.createElement('main');
     body.className = 'body';
     body.appendChild(words);

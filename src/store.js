@@ -31,7 +31,8 @@ export async function openStore(name = DB) {
   const db = await req(open);
   db.onversionchange = () => db.close(); // another tab is removing everything: never stand in its way
 
-  const one =(store, mode, fn) => {
+  // async: a connection another tab has closed is a rejected promise, not an error mid screen.
+  const one = async (store, mode, fn) => {
     const tx = db.transaction(store, mode);
     const result = fn(tx.objectStore(store));
     return done(tx).then(() => (result && 'result' in result ? result.result : undefined));

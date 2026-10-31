@@ -157,7 +157,7 @@ test('progress survives a reload, and the sprint carries on where it was', async
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
   expect(await page.evaluate(() => window.offScript.states.size)).toBe(before.states);
-  await page.getByRole('button', { name: 'Start learning' }).click();
+  await page.getByRole('button', { name: 'Next round' }).click();
   await page.waitForFunction(() => window.offScript.card);
   expect(await page.evaluate(() => window.offScript.card.item.id)).toBe(before.card);
 });
@@ -502,7 +502,7 @@ test('after off script day: Today says so, and a sprint takes a miss first, then
     o.go('today');
     return ids;
   });
-  await page.getByRole('button', { name: 'Start learning' }).click();
+  await page.getByRole('button', { name: 'Next round' }).click();
   await page.waitForFunction(() => window.offScript.card);
   const goes = [];
   for (const id of [missed, justDue, slipped]) {

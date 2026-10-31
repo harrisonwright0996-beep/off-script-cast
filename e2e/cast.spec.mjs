@@ -16,7 +16,7 @@ test('code in odd capitals and spacing works; only their lines arrive', async ({
   const names = page.getByRole('main').getByRole('button');
   await expect(names).toHaveCount(2);
   await names.nth(1).click();
-  await page.getByRole('button', { name: /^Yes, I am/ }).click();
+  await page.getByRole('button', { name: 'Yes, these are my lines' }).click();
   await page.getByLabel('Your name').fill('Test Pupil');
   await page.getByRole('button', { name: 'Carry on' }).click();
   await expect(page.getByRole('heading', { name: 'Already know some?' })).toBeVisible({ timeout: 30000 });
@@ -123,21 +123,21 @@ test('the end of a round says what it gained', async ({ page }) => {
   await page.getByRole('button', { name: 'Start learning' }).click();
   for (let i = 0; i < 40 && (await page.locator('h1').textContent()) !== 'Round done'; i++) await answerCard(page);
   await expect(page.getByRole('heading', { name: 'Round done' })).toBeVisible();
-  await expect(page.locator('main .lead')).toHaveText(/^\d+ lines? on (its|their) way\.$/);
+  await expect(page.locator('main .lead')).toHaveText(/^\d+ lines? on (its|their) way\. (It|They) counts? towards your % once you can still do (it|them) on another day\.$/);
   await page.getByRole('button', { name: 'Back to your lines' }).click();
   await expect(page.locator('.ring-num')).toHaveText('0%');
   await page.evaluate(async () => {
     const o = window.offScript;
     const it = o.model.items[0];
-    const day = o.today();
-    o.states.set(it.id, { ...o.getState(it.id), status: 'review', firstDay: day, learnedDay: day, passes: 3, helped: 1, stability: 200, passDays: [day], lastResult: 'pass', lastDay: day, lastTime: Date.now() - 3600000 });
+    const day = '2026-10-27';
+    o.states.set(it.id, { ...o.getState(it.id), status: 'review', firstDay: day, learnedDay: day, passes: 3, helped: 1, stability: 200, passDays: [day], lastResult: 'pass', lastDay: day, lastTime: Date.now() - 86400000 });
     await o.go('sprint', { scope: 'tests', minutes: 2 });
   });
   await page.locator('.keypad').waitFor();
   await page.keyboard.type(await keysOf(page));
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Checks done' })).toBeVisible();
-  await expect(page.locator('main .lead')).toHaveText(/^Up \d+% to \d+%\.$/);
+  await expect(page.locator('main .lead')).toHaveText(/^Up to \d+%\.$/);
 });
 
 test('saying is not enough: the go that learns a line has to be typed, and is said aloud', async ({ page }) => {
@@ -147,8 +147,8 @@ test('saying is not enough: the go that learns a line has to be typed, and is sa
   const id = await page.evaluate(() => {
     const o = window.offScript;
     const id = o.model.items[3].id;
-    const day = o.today();
-    o.states.set(id, { ...o.getState(id), status: 'review', firstDay: day, learnedDay: day, passes: 3, helped: 3, stability: 200, passDays: [day], lastResult: 'pass', lastDay: day, lastTime: Date.now() - 3600000, lastMode: 'say' });
+    const day = '2026-10-27'; // met on an earlier day: a line can only count from the day after
+    o.states.set(id, { ...o.getState(id), status: 'review', firstDay: day, learnedDay: day, passes: 3, helped: 3, stability: 200, passDays: [day], lastResult: 'pass', lastDay: day, lastTime: Date.now() - 86400000, lastMode: 'say' });
     o.go('sprint', { scope: 'tests', minutes: 2 });
     return id;
   });
@@ -186,6 +186,8 @@ test('a walk says what to do now, in words, and the tape has the coach in it', a
   await page.getByRole('button', { name: 'No, start from the beginning' }).click();
   await page.getByRole('button', { name: 'Walk' }).click();
   await page.getByRole('button', { name: '5 minutes', exact: true }).click();
+  await expect(page.locator('.guide')).toContainText('Press Play when you are ready');
+  await page.getByRole('button', { name: 'Play' }).click();
   await expect(page.locator('.guide')).toContainText('New line: just listen');
   const clips = await page.evaluate(() => window.offScript.walk.tape.steps.filter((s) => s.clip).map((s) => s.clip));
   expect(clips[0]).toBe('k-intro.mp3');
@@ -198,7 +200,7 @@ test('code again after removing everything: the phone is clean', async ({ page }
   await enrol(page);
   await page.getByRole('button', { name: 'No, start from the beginning' }).click();
   await page.getByRole('button', { name: 'Settings' }).click();
-  await page.getByRole('button', { name: 'Not you? Remove everything' }).click();
+  await page.getByRole('button', { name: 'Remove everything from this phone' }).click();
   await page.getByRole('button', { name: 'Remove everything' }).click();
   await expect(page.getByLabel('Company code').or(page.getByRole('button', { name: 'Carry on without installing' }))).toBeVisible();
 });
@@ -263,7 +265,7 @@ test('screens to look at, on the invented play', async ({ page }, info) => {
   await page.getByRole('button', { name: 'Whole Company', exact: true }).waitFor();
   await shot('3-pick');
   await page.getByRole('button', { name: 'Whole Company', exact: true }).click();
-  await page.getByRole('button', { name: 'Yes, I am Whole Company' }).click();
+  await page.getByRole('button', { name: 'Yes, these are my lines' }).click();
   await page.getByLabel('Your name').fill('Test Pupil');
   await page.getByRole('button', { name: 'Carry on' }).click();
   await expect(page.getByRole('heading', { name: 'Already know some?' })).toBeVisible({ timeout: 30000 });
@@ -353,7 +355,7 @@ test('the director sees numbers once a phone has signal, and names only with bot
   await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
   await expect.poll(() => Object.values(progress).length).toBe(1);
   const [row] = Object.values(progress);
-  expect(Object.keys(row).sort()).toEqual(['fading', 'id', 'lastDay', 'learnt', 'pack', 'percent', 'total', 'who']);
+  expect(Object.keys(row).sort()).toEqual(['fading', 'id', 'lastDay', 'learnt', 'onWay', 'pack', 'percent', 'total', 'who']);
   expect(JSON.stringify(row)).not.toContain('Test Pupil');
   expect(row.percent).toBe(0);
 
@@ -390,13 +392,20 @@ test('the director sees numbers once a phone has signal, and names only with bot
   await page.getByLabel('Staff code').fill(STAFF);
   await page.getByRole('button', { name: 'Open' }).click();
   await expect(page.getByText(/^2 started, \d+ parts? not started\./)).toBeVisible({ timeout: 30000 });
-  await expect(page.locator('.staff-list li').filter({ hasText: 'Test Pupil' })).toContainText('Learning Whole Company.');
+  await expect(page.locator('.staff-list li').filter({ hasText: 'Test Pupil' })).toContainText("On Whole Company's lines.");
   await expect(page.locator('.staff-list li').filter({ hasText: 'Test Pupil' })).toContainText('Practised today');
-  await expect(page.locator('.staff-list li').filter({ hasText: 'Sam Understudy' })).toContainText('Learning Whole Company.');
+  await expect(page.locator('.staff-list li').filter({ hasText: 'Sam Understudy' })).toContainText("On Whole Company's lines.");
   await expect(page.locator('.staff-list li').filter({ hasText: 'Not started' }).first()).toBeVisible();
   await page.reload();
   await expect(page.getByText(/^2 started,/)).toBeVisible({ timeout: 30000 });
-  await page.getByRole('button', { name: 'Forget this phone' }).click();
+  // A row left by a mistake goes, after a second tap, and no one else's does.
+  const sam = page.locator('.staff-list li').filter({ hasText: 'Sam Understudy' });
+  await sam.getByRole('button', { name: 'Remove' }).click();
+  await expect(page.locator('.staff-list li').filter({ hasText: 'Sam Understudy' })).toHaveCount(1);
+  await sam.getByRole('button', { name: 'Remove Sam Understudy from this page?' }).click();
+  await expect(page.locator('.staff-list li').filter({ hasText: 'Sam Understudy' })).toHaveCount(0);
+  await expect(page.locator('.staff-list li').filter({ hasText: 'Test Pupil' })).toHaveCount(1);
+  await page.getByRole('button', { name: 'Remove my codes from this phone' }).click();
   await expect(page.getByLabel('Staff code')).toBeVisible();
 });
 

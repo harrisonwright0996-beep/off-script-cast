@@ -180,6 +180,7 @@ test('a disabled Start can be read, and an unlit scene dot can be seen, in every
     await expect(page.locator('.light-pc').first()).toHaveText('0%');
     expect(await contrast(page, 'dot'), `dot in ${theme}`).toBeGreaterThanOrEqual(3);
     await page.getByRole('button', { name: 'Choose' }).click();
+    await page.getByLabel('Which lines').selectOption({ label: 'Lines still being learnt' });
     await expect(page.getByRole('button', { name: 'Start' })).toBeDisabled();
     expect(await contrast(page, 'start'), `Start in ${theme}`).toBeGreaterThanOrEqual(4.5);
   }

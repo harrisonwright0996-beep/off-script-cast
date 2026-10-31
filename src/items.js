@@ -31,7 +31,21 @@ export function displayRole(role) {
 // Sentence ends are . ! or ? (with any closing quotes or brackets). An ellipsis is not an end:
 // in this script it is usually a pause inside a thought.
 export function splitSentences(text) {
-  return text.split(/(?<=[.!?]["'”’)\]]*)\s+/).filter(Boolean);
+  return splitAfter(text, /[.!?]["'”’)\]]*$/);
+}
+
+// Splits at each run of spaces whose text so far ends as `end` says. (Not a lookbehind in the pattern:
+// iPhones before iOS 16.4 cannot read one, and the whole app would not start.)
+function splitAfter(text, end) {
+  const parts = [];
+  let from = 0;
+  for (const m of text.matchAll(/\s+/g)) {
+    if (!end.test(text.slice(from, m.index))) continue;
+    parts.push(text.slice(from, m.index));
+    from = m.index + m[0].length;
+  }
+  parts.push(text.slice(from));
+  return parts.filter(Boolean);
 }
 
 const words = (s) => keyedCount(tokenize(s));
@@ -40,7 +54,7 @@ const words = (s) => keyedCount(tokenize(s));
 // as near the middle as possible, so no card is a wall of words.
 function splitLongSentence(s, max) {
   if (words(s) <= max) return [s];
-  const parts = s.split(/(?<=[,;:–—])\s+/);
+  const parts = splitAfter(s, /[,;:–—]$/);
   if (parts.length < 2) return [s];
   const total = words(s);
   let best = 1;

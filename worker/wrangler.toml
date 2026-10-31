@@ -15,6 +15,11 @@ binding = "KV"
 id = "0b2b60a5b3c94fb58796256f033661c2"
 
 [[ratelimits]]
+name = "WRITES"
+namespace_id = "1002"
+simple = { limit = 120, period = 60 }
+
+[[ratelimits]]
 name = "LIMIT"
 namespace_id = "1001"
 simple = { limit = 10, period = 60 }

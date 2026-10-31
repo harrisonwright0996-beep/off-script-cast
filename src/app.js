@@ -17,7 +17,7 @@ import { showSettings, wipePhone } from './ui/settings.js';
 import { showWalk } from './ui/walk.js';
 import { showChoose } from './ui/choose.js';
 import { showStartAgain } from './ui/again.js';
-import { learntPercent } from './cast/proof.js';
+import { PEEK_GAP, learntPercent } from './cast/proof.js';
 import { ENDS } from './cast/config.js';
 
 const EVENT_DAYS = 9; // the plan looks back this far
@@ -62,6 +62,16 @@ async function boot() {
     cleanup: null,
     nav: 0,
     fit: { k: 1, n: 0 }, // his forgetting curve factor, refitted when a sprint or walk starts
+    peeks: (await store.get('peeks')) || {}, // when each line was last put on show
+
+    // These lines have just been on show, so typing them for a while proves nothing (cast/proof.js).
+    peek(ids) {
+      const now = Date.now();
+      for (const [id, at] of Object.entries(ctx.peeks)) if (now - at >= PEEK_GAP) delete ctx.peeks[id];
+      for (const id of ids) ctx.peeks[id] = now;
+      store.set('peeks', { ...ctx.peeks }).catch(() => {});
+    },
+    peeked: (id) => Date.now() - (ctx.peeks[id] || 0) < PEEK_GAP,
 
     getState: (id) => ctx.states.get(id) || newState(id),
     today: () => dayKey(),
@@ -88,8 +98,7 @@ async function boot() {
       ctx.index = indexModel(model);
       await store.set('script', model);
       await store.set('scriptMeta', meta);
-      await store.del('sprint');
-      await ctx.settleSeen();
+      await ctx.settleSeen(); // a sprint saved for other words is not carried on (it keeps their hash)
     },
 
     // The % has moved for a reason that is not a slip (a new script, Start again, a backup), so the
@@ -158,7 +167,7 @@ async function boot() {
     for (const s of await store.allStates()) ctx.states.set(s.id, s);
   }
 
-  if (needsInstall()) return ctx.go('install');
+  if (needsInstall(!!model)) return ctx.go('install');
   return ctx.go(model ? 'today' : 'unlock');
 }
 
@@ -191,11 +200,11 @@ async function removeAndRestart() {
     store = store || (await openStore());
     await wipePhone({ store, keys: await store.get('keys') });
   } catch {
-    indexedDB.deleteDatabase(DB);
     try {
+      indexedDB.deleteDatabase(DB);
       localStorage.clear();
     } catch {
-      // nothing stored there
+      // nothing can be stored here: nothing to clear
     }
   }
   location.reload();
@@ -215,6 +224,10 @@ function couldNotStart(root) {
 }
 
 boot().catch((err) => {
-  couldNotStart(document.getElementById('app'));
+  window.offScript = window.offScript || {}; // it has started, so the watchdog stays quiet (boot.js)
+  const root = document.getElementById('app');
+  // Some browsers and private modes refuse storage: installing is often the way out.
+  if (needsInstall()) showInstall({ root, model: null, go: () => couldNotStart(root) });
+  else couldNotStart(root);
   console.error(err);
 });

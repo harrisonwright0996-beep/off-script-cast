@@ -85,6 +85,11 @@ export async function fakeWorker(page, { calls = [], progress = {} } = {}) {
   const { files, keys } = await workerFiles();
   await page.exposeFunction('castWorker', (path, headers, body) => {
     seen.calls.push(path);
+    if (path === '/staff/remove') {
+      if (headers['x-staff-token'] !== STAFF) return { status: 401 };
+      delete seen.progress[JSON.parse(body).id];
+      return { status: 204 };
+    }
     if (path === '/staff') return headers['x-staff-token'] === STAFF ? { status: 200, bytes: Buffer.from(JSON.stringify(Object.values(seen.progress))).toString('base64') } : { status: 401 };
     if (headers['x-cast-token'] !== keys.token) return { status: 401 };
     if (path === '/progress') {
@@ -123,7 +128,7 @@ export async function enrol(page, name = 'Whole Company', url = './', who = 'Tes
   await page.getByLabel('Company code').fill(CODE);
   await page.getByRole('button', { name: 'Unlock' }).click();
   await page.getByRole('button', { name, exact: true }).click();
-  await page.getByRole('button', { name: `Yes, I am ${name}` }).click();
+  await page.getByRole('button', { name: 'Yes, these are my lines' }).click();
   await page.getByLabel('Your name').fill(who);
   await page.getByRole('button', { name: 'Carry on' }).click();
   await expect(page.getByRole('heading', { name: 'Already know some?' })).toBeVisible({ timeout: 30000 });

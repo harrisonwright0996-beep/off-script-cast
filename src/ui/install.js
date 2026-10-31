@@ -7,10 +7,12 @@ const BROWSER_FLAG = 'off-script-cast-in-browser';
 
 // Chrome on Android offers a real install button: its offer comes once, early, so it is kept here.
 let offer = null;
+let offered = () => {}; // an offer that comes after the steps are on screen
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     offer = e;
+    offered();
   });
 }
 
@@ -22,10 +24,12 @@ function inBrowserChosen() {
   }
 }
 
-export const needsInstall = () => mustInstall(thisDevice()) && !inBrowserChosen();
+// On Android the app and the browser share what is saved, so a phone with its lines has nothing to
+// install for, whichever way it was opened.
+export const needsInstall = (hasLines = false) => mustInstall(thisDevice()) && !inBrowserChosen() && !(hasLines && thisDevice().startsWith('android'));
 
 const SAFARI = [
-  'Tap the three dots next to the address bar. On an older iPhone, skip this: the Share button is at the bottom of the screen.',
+  'Tap the three dots next to the address bar. No three dots? Skip this: the Share button is at the bottom of the screen, or the top on an iPad.',
   'Tap Share (the square with an arrow pointing up).',
   'Scroll down and tap Add to Home Screen. You may need to tap View More first.',
   'If you see Open as Web App, leave it on. Tap Add.',
@@ -38,7 +42,8 @@ const CHROME_ANDROID = [
 ];
 const OTHER_ANDROID = [
   'Open the browser menu (three dots or three lines).',
-  'Tap Add page to, then Home screen. If you cannot see that, open this link in Chrome instead.',
+  'Tap Install or Add to Home screen. On Samsung Internet, tap Add page to, then Home screen.',
+  'Cannot see that? Tap Copy link below and open it in Chrome.',
   'Open Off Script from your Home screen.',
 ];
 
@@ -52,7 +57,7 @@ const STEPS = {
     copy: true,
   },
   'android-chrome': { name: 'Android', lead: 'Install Off Script. It takes a few seconds, and then it works like an app, even with no signal.', steps: CHROME_ANDROID },
-  'android-other': { name: 'Android, not in Chrome', lead: 'Add Off Script to your Home screen.', steps: OTHER_ANDROID },
+  'android-other': { name: 'Android, not in Chrome', lead: 'Add Off Script to your Home screen.', steps: OTHER_ANDROID, copy: true },
 };
 
 const list = (steps) => h('ol', { class: 'steps' }, steps.map((s) => h('li', {}, s)));
@@ -70,7 +75,8 @@ export function showInstall(ctx) {
   };
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(location.href.split('#')[0]);
+      const stuck = new Promise((_, reject) => setTimeout(reject, 1500)); // a phone that never answers
+      await Promise.race([navigator.clipboard.writeText(location.href.split('#')[0]), stuck]);
       announce('Link copied');
       said.textContent = 'Copied. Now paste it into your browser.';
     } catch {
@@ -85,21 +91,29 @@ export function showInstall(ctx) {
     all.querySelector('h2').focus(); // the button that had focus has gone
   }, { class: 'btn link' });
   const install =
-    kind === 'android-chrome'
+    kind.startsWith('android')
       ? button('Install Off Script', async () => {
           if (!offer) {
             said.textContent = 'Your phone has not offered to install yet. Follow the steps above.';
             return;
           }
           offer.prompt();
-          await offer.userChoice;
+          const { outcome } = await offer.userChoice;
           offer = null;
+          if (outcome !== 'accepted') return;
+          install.remove();
+          said.textContent = 'Installed. Open Off Script from your Home screen.';
         }, { class: 'btn primary' })
       : null;
+  // Other browsers only ever offer it themselves: no offer, no button.
+  if (install && kind !== 'android-chrome' && !offer) {
+    install.hidden = true;
+    offered = () => (install.hidden = false);
+  }
   ctx.root.append(
     screen({
       title: 'Install Off Script',
-      body: [h('p', { class: 'lead' }, info.lead), list(info.steps), info.copy ? button('Copy link', copy, { class: 'btn' }) : null, said, others, all],
+      body: [h('p', { class: 'lead' }, info.lead), list(info.steps), kind === 'ios-safari' ? h('p', { class: 'help' }, 'Already added it? Open Off Script from your Home Screen.') : null, info.copy ? button('Copy link', copy, { class: 'btn' }) : null, said, others, all],
       footer: [install, kind.startsWith('ios') || kind === 'in-app' ? h('p', { class: 'help' }, 'If you carry on here and install later, you will start again.') : null, button('Carry on without installing', carryOn, { class: 'btn link' })].filter(Boolean),
     }),
   );

@@ -22,6 +22,9 @@ export const DEFAULT_SETTINGS = {
   runThrough: null, // the last choices on Run through: { scene, which, help }
 };
 
+// A big part left on short rounds never reaches its last lines, so it starts on long ones.
+export const roundMinutes = (lines) => (lines > 60 ? 8 : DEFAULT_SETTINGS.sprintMinutes);
+
 export function withDefaults(saved) {
   return { ...DEFAULT_SETTINGS, ...(saved || {}) };
 }

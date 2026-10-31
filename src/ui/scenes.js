@@ -1,6 +1,6 @@
 // Scenes: the play scene by scene, and a reader for each: speech numbers, speakers in bold,
 // directions in square brackets (never italics), on screen text marked as such.
-import { h, screen, button, announce } from './dom.js';
+import { h, screen, button, announce, settled } from './dom.js';
 import { linesToCheck } from './checkin.js';
 import { progressOf } from '../plan.js';
 import { bracketParens } from '../items.js';
@@ -61,6 +61,7 @@ function parts(scene) {
 
 export function showReader(ctx, { scene: index }) {
   const scene = ctx.model.scenes[index];
+  ctx.peek(scene.itemIds); // reading a line just before typing it would prove nothing
   const all = parts(scene);
   let reading = false;
 
@@ -120,7 +121,7 @@ export function showReader(ctx, { scene: index }) {
               'div',
               { class: 'stack' },
               h('p', { class: 'help' }, 'Its lines go back to not started, to learn them again from the beginning.'),
-              button('Start this scene again', () => ctx.go('again', { scene: index })),
+              button('Start this scene again', settled(() => ctx.go('again', { scene: index }))),
             )
           : null,
       ],

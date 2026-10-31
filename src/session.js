@@ -26,12 +26,12 @@
 // At time up nothing new comes: the sprint carries on until every line it has shown is right without help.
 // The session never saves anything itself: answer() returns the event and new state for the app to
 // save, and advance() then picks the next card using the app's up to date states and plan.
-import { applyHelp, applyResult, knownToday, needsTeaching } from './state.js';
+import { applyHelp, applyResult, needsTeaching } from './state.js';
 import { SLOW, recallNow } from './memory.js';
 import { cueOf, fnv1a, speakerChoices } from './items.js';
 import { beatStage, testsOf, typedPerWord } from './plan.js';
 import { dayKey } from './dates.js';
-import { earnsProof, needsProof, spotCheck } from './cast/proof.js';
+import { canProve, earnsProof, needsProof, spotCheck } from './cast/proof.js';
 
 export const TEACH_FIRST_MESSAGE = 'These lines are new to you, so you will learn them first.';
 export const AHEAD_MESSAGE = 'Nice. These are extra new lines.';
@@ -41,6 +41,7 @@ export const CLOSING_MESSAGE = "Nearly there. Just the lines still to finish, th
 export const LETTERS_MESSAGE = 'As a line gets stronger, it shows fewer first letters. Say every word, the blanks too.';
 export const SHUFFLE_MESSAGE = 'New lines come back mixed up, until you get each one right twice from its cue.';
 export const LADDER_MESSAGE = 'The cue is the line just before yours. Each go gives you less help.';
+export const CLOSING_TRIES = 2; // misses at time up before a line waits for another day: a round always ends
 
 export const GAP = 3; // other answers before a line comes back
 export const POOL = 2; // beats being learned at a time
@@ -52,6 +53,8 @@ export const HELP_BELOW = 0.8;
 // Right from the cue alone fewer times than this: the first letters first, whatever the curve says.
 export const EARLY = 3;
 const VERSION = 2; // of the saved sprint: one saved by the first version is not carried on
+// A copy of the sprint. (Phones before iOS 15.4 and Chrome 98 have no structuredClone: it is plain data.)
+const copy = (x) => (typeof structuredClone === 'function' ? structuredClone(x) : JSON.parse(JSON.stringify(x)));
 
 // Left to Off Script, whether a line already started has its first go with the first letters.
 export const helpFirst = (s, now, k = 1) => s.passes < EARLY || s.lastResult !== 'pass' || recallNow(s, now, k) < HELP_BELOW;
@@ -112,11 +115,12 @@ const sprintState = () => ({ pool: [], teach: null, streak: 0, lastId: null, lin
 // where they follow on in a scene. help: 'auto' (as above), 'cue' (from the cue alone first, the first
 // letters only after a miss), 'none' (always from the cue alone, misses too), 'letters' (the first
 // letters first for every line), 'read' (read it, the first letters, then without).
-export function createSession({ model, index, getPlan, getState, settings, scope = 'all', custom = null, saved = null, now = () => Date.now() }) {
+// peeked: whether a line has just been on show (cast/proof.js).
+export function createSession({ model, index, getPlan, getState, settings, scope = 'all', custom = null, saved = null, now = () => Date.now(), peeked = () => false }) {
   const { byId, beatById } = index;
   let S =
     saved && saved.v === VERSION
-      ? structuredClone(saved)
+      ? copy(saved)
       : {
           v: VERSION,
           day: dayKey(new Date(now())),
@@ -211,6 +215,8 @@ export function createSession({ model, index, getPlan, getState, settings, scope
   // where nothing stops a line being said over and over with no gap.
   const provable = (t) => !S.custom && !t.extra;
   const dayNow = () => dayKey(new Date(now()));
+  // Put on show by an answer that was undone, or by a look at the line just now.
+  const onShow = (id) => !!(S.shown && S.shown[id]) || peeked(id);
 
   // A line of a beat still to be taught: never yet right, and not yet shown in this sprint.
   const toTeach = (beatId) => beatById.get(beatId).itemIds.find((id) => !S.lines[id] && needsTeaching(getState(id))) || null;
@@ -367,6 +373,7 @@ export function createSession({ model, index, getPlan, getState, settings, scope
     const step = currentStep(t);
     const c = { key: ++S.seq, step, queue: t.queue, item, cue: cueOf(index, item), label: t.again && t.kind === 'item' ? 'Again' : LABELS[t.queue] };
     if (t.kind === 'seq' && t.queue === 'run') c.label = `Run: ${model.scenes[item.scene].heading}`;
+    if (t.queue === 'new' && getState(item.id).walks) c.label = LABELS.beat; // heard on a walk: not new to them
     if (t.kind === 'seq') c.progress = { pos: t.pos + 1, total: t.ids.length };
     if (step === 'front') {
       startLadder(t);
@@ -396,8 +403,8 @@ export function createSession({ model, index, getPlan, getState, settings, scope
       // check now and then. (Not on the ladder: it is the first time from the cue.)
       const s = getState(item.id);
       // (Nor when an undone answer put the line on show: it cannot count this round.)
-      c.mustType = !t.ladder && provable(t) && needsProof(s, dayNow()) && !(S.shown && S.shown[item.id]);
-      c.spot = !t.ladder && spotCheck(s, S.goes, item.id);
+      c.mustType = !t.ladder && provable(t) && needsProof(s, dayNow()) && !onShow(item.id);
+      c.spot = !t.ladder && spotCheck(s, S.goes, item.id, dayNow());
       // A test of a line already taught. While a line is being taught, every word counts.
       c.tested = !t.ladder && !t.pretest && s.status !== 'new';
     }
@@ -465,7 +472,7 @@ export function createSession({ model, index, getPlan, getState, settings, scope
     // Returns the event and new state to save, the snapshot for undo, what the line needs next,
     // whether it comes back later for it, and whether it went a rung back on the ladder.
     answer(result) {
-      const snapshot = structuredClone(S);
+      const snapshot = copy(S);
       const t = S.task;
       const id = currentId(t);
       const item = byId.get(id);
@@ -484,10 +491,13 @@ export function createSession({ model, index, getPlan, getState, settings, scope
       const perWord = typedPerWord(result, item);
       // A line right but for one word grows as little, so it comes back sooner.
       const slow = result.pass && !help && !primed && !relearn && !result.slip && (result.misses.length > 0 || (typing != null && perWord != null && perWord > SLOW * typing));
-      // A line put on show by an answer that was undone cannot prove itself straight after.
-      const fair = provable(t) && !knownToday(prev, day) && !(S.shown && S.shown[id]);
+      // Right but for one word, the word it was last time too: a habit, not a slip. It still passes,
+      // but it does not grow or prove the line, and the line comes back later with its letters.
+      const closeWord = result.pass && !help && !result.slip && result.misses.length === 1 ? result.misses[0] : null;
+      const habit = closeWord !== null && prev.closeWord === closeWord;
+      const fair = provable(t) && canProve(prev, day) && !onShow(id) && !habit;
       const proof = fair && earnsProof({ pass: result.pass, mode: result.mode, help, ladder: !!t.ladder, slip: !!result.slip });
-      const state = help && result.pass ? applyHelp(prev, { day }) : applyResult(prev, { pass: result.pass, day, time, mode: result.mode, k, pretest, relearn, primed, slow, proof });
+      const state = help && result.pass ? applyHelp(prev, { day }) : applyResult(prev, { pass: result.pass, day, time, mode: result.mode, k, pretest, relearn, primed, slow, proof, stall: habit, closeWord });
       const event = { time, day, id, pass: result.pass, mode: result.mode, queue, misses: result.misses.length, speakerWrong: !!result.speakerWrong, relearn, prev };
       if (help) event.help = true;
       if (primed) event.primed = true;
@@ -517,10 +527,18 @@ export function createSession({ model, index, getPlan, getState, settings, scope
         // A line being learned is asked again from its cue alone until it is learned, unless time is up.
         const more = !help && !S.closing && pooled(id) && state.status !== 'review';
         line.need = again ? 'help' : help || more ? 'clean' : 'done';
+        if (habit && !line.retold) {
+          line.retold = true;
+          line.need = 'help';
+        }
       } else {
         line.missed = true;
         line.clean = false;
         line.need = missNeed(prev);
+      }
+      if (S.closing && !result.pass) {
+        line.closingMisses = (line.closingMisses || 0) + 1;
+        if (line.closingMisses >= CLOSING_TRIES) line.need = 'done';
       }
       if (!help) {
         S.stats.answered += 1;
@@ -592,7 +610,7 @@ export function createSession({ model, index, getPlan, getState, settings, scope
     // Undo: the app restores the item state and removes the event, then calls this. shown: the line,
     // when the answer undone had put it on show and it could still be proved.
     restore(snapshot, shown = null) {
-      S = structuredClone(snapshot);
+      S = copy(snapshot);
       if (shown) (S.shown ||= {})[shown] = true;
       card = S.task ? cardFor(S.task) : null;
       return card;
@@ -600,7 +618,7 @@ export function createSession({ model, index, getPlan, getState, settings, scope
 
     // What to save so a sprint can carry on after the app closes.
     save() {
-      return structuredClone(S);
+      return copy(S);
     },
   };
   if (S.task && !S.task.done && byId.has(currentId(S.task))) card = cardFor(S.task);

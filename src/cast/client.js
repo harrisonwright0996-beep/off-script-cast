@@ -72,5 +72,11 @@ export async function staffNumbers(code) {
   return res.json();
 }
 
+// Takes a row off the director's page: a wrong part, a typing slip, or someone who has left.
+export async function staffRemove(code, id) {
+  const res = await fetch(`${WORKER}/staff/remove`, { method: 'POST', headers: { 'x-staff-token': code.trim(), 'content-type': 'application/json' }, body: JSON.stringify({ id }) });
+  if (!res.ok) throw new CastError('offline');
+}
+
 export const post = (path, token, body) =>
   fetch(`${WORKER}${path}`, { method: 'POST', headers: { 'x-cast-token': token, 'content-type': 'application/json' }, body: JSON.stringify(body) });

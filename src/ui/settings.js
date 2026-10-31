@@ -1,13 +1,14 @@
 // Settings: how it looks, how practice works, the voice, reminders, and progress files. Every change
 // is saved at once.
-import { h, clear, screen, button, announce, focusHeading, plural, pickFile } from './dom.js';
-import { canPush, disable, enable } from '../cast/reminders.js';
+import { h, clear, screen, button, announce, focusHeading, plural, pickFile, settled } from './dom.js';
+import { canPush, disable, enable, liveSub } from '../cast/reminders.js';
+import { forgetRow } from '../cast/progress.js';
 import { mustInstall, thisDevice } from '../device.js';
 import { makeBackup, readBackup } from '../backup.js';
 import { withDefaults } from '../settings.js';
 import { dayKey, formatDay } from '../dates.js';
 import { canSpeak, voices, onVoicesChanged, speak } from '../tts.js';
-import { SEEN } from './unlock.js';
+import { SEEN, askName } from './unlock.js';
 
 const OPTIONS = {
   textSize: [90, 100, 115, 130, 150, 175, 200].map((n) => [n, `${n}%`]),
@@ -29,13 +30,15 @@ const BACKUP_PROBLEMS = {
 };
 
 const FORGET_WAIT = 3000; // no signal must not hold up removing everything
+const BROWSER_FLAG = 'off-script-cast-in-browser';
 
-// Everything off this phone. Reminders go first, so the worker forgets the subscription.
+// Everything off this phone. Reminders and the director's row go first, so the worker forgets them.
+// A director's codes on this phone are theirs, not the pupil's, and stay (staff.js).
 export async function wipePhone(ctx) {
-  await Promise.race([disable(ctx).catch(() => {}), new Promise((done) => setTimeout(done, FORGET_WAIT))]);
+  await Promise.race([Promise.allSettled([disable(ctx), forgetRow(ctx)]), new Promise((done) => setTimeout(done, FORGET_WAIT))]);
   await ctx.store.removeEverything();
   try {
-    localStorage.clear();
+    localStorage.removeItem(BROWSER_FLAG);
   } catch {
     // nothing stored there
   }
@@ -162,33 +165,42 @@ export function showSettings(ctx) {
       ],
       [
         button('Keep everything', () => ctx.go('settings'), { class: 'btn primary' }),
-        button('Remove everything', async () => {
+        button('Remove everything', settled(async () => {
           await wipePhone(ctx);
           location.reload();
-        }),
+        })),
       ],
     );
   }
 
   // Reminders: on or off. On a phone that cannot have them, it says why.
   const reminderBox = h('div', { class: 'stack' });
-  async function drawReminders() {
-    clear(reminderBox);
-    if (!canPush()) return reminderBox.append(h('p', { class: 'help' }, 'Reminders need Off Script installed on your Home Screen, on an up to date phone.'));
-    const on = !!(await ctx.store.get('push'));
-    reminderBox.append(
-      h('p', { class: 'help', role: 'status' }, on ? 'Reminders are on.' : 'Reminders are off.'),
-      button(on ? 'Turn reminders off' : 'Turn reminders on', async () => {
-        if (on) await disable(ctx);
-        else {
-          const worked = await enable(ctx).catch(() => false);
-          if (!worked) announce('Reminders did not switch on. Check notifications are allowed for Off Script in your phone settings.');
-        }
-        drawReminders();
-      }),
-    );
+  let turning = false;
+  async function drawReminders(problem = null, focus = false) {
+    if (!canPush()) return clear(reminderBox).append(h('p', { class: 'help' }, 'Reminders need Off Script installed on your Home Screen, on an up to date phone.'));
+    const on = !!(await liveSub(ctx).catch(() => null));
+    const toggle = button(on ? 'Turn reminders off' : 'Turn reminders on', settled(async () => {
+      if (turning) return; // a second tap is not a second subscription
+      turning = true;
+      let trouble = null;
+      if (on) {
+        await disable(ctx);
+        await ctx.store.set('pushAsked', true); // their answer: not offered again on Your lines
+      } else if (!(await enable(ctx).catch(() => false))) trouble = 'Reminders did not switch on. Check notifications are allowed for Off Script in your phone settings.';
+      turning = false;
+      await drawReminders(trouble, true);
+    }));
+    clear(reminderBox).append(h('p', { class: 'help', role: 'status' }, on ? 'Reminders are on.' : 'Reminders are off.'), problem ? h('p', { class: 'message', role: 'alert' }, problem) : null, toggle);
+    if (focus) toggle.focus();
   }
   drawReminders();
+
+  // The name the director sees, and a way to put a slip right.
+  const nameBox = h('div', { class: 'stack' });
+  ctx.store.get('myName').then((name) => {
+    if (!name) return;
+    nameBox.append(h('p', { class: 'help' }, `Your name: ${name}.`), button('Change my name', settled(() => askName(ctx, () => ctx.go('settings'), null, name, () => ctx.go('settings')))));
+  }).catch(() => {}); // another tab has removed everything: Remove everything here still has to show
 
   ctx.root.append(
     screen({
@@ -222,15 +234,16 @@ export function showSettings(ctx) {
         h(
           'div',
           { class: 'group' },
-          ctx.member ? h('p', { class: 'help' }, `You are ${ctx.member.name}.`) : null,
+          ctx.member ? h('p', { class: 'help' }, `Learning as ${ctx.member.name}.`) : null,
+          nameBox,
           h('p', { class: 'help' }, 'A backup holds your results, never your lines. Save it somewhere safe if you are changing phone.'),
           h(
             'div',
             { class: 'stack' },
             button('Back up progress', () => saveBackup(ctx)),
             button('Restore a backup', restore),
-            ctx.states.size ? button('Start again from 0%', () => ctx.go('again')) : null,
-            button('Not you? Remove everything', removeAll),
+            ctx.states.size ? button('Start again from 0%', settled(() => ctx.go('again'))) : null,
+            button('Remove everything from this phone', settled(removeAll)),
           ),
         ),
         h('p', { class: 'help' }, `Your lines stay on this phone. ${SEEN} If reminders are on, the time of your next one is sent too.`),

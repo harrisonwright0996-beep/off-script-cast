@@ -106,7 +106,7 @@ test.describe('the startup watchdog', () => {
     await page.goto('./');
     await expect(page.getByText('Opening Off Script…')).toBeVisible();
     await expect(stuck(page)).toBeVisible({ timeout: 15000 });
-    await expect(page.getByRole('alert')).toHaveText('Check your signal and try again. If it keeps happening, your phone may need updating.');
+    await expect(page.getByRole('alert')).toHaveText('Check your signal and try again. If it keeps happening, this phone may be too old for Off Script. Ask your director.');
     await page.screenshot({ path: `shots/${test.info().project.name}-did-not-open.png` });
     await page.unroute('**/src/app.js');
     await page.getByRole('button', { name: 'Try again' }).click();

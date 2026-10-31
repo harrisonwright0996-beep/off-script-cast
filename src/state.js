@@ -28,6 +28,9 @@ export function newState(id) {
     lastMode: null,
     proved: false, // typed right from its cue alone (cast/proof.js)
     knownDay: null, // the day it was typed right in Already know some?
+    closeWord: null, // the word wrong the last time it passed with one word wrong
+    walks: 0, // times heard and said on a walk with no mark against it
+    walkDay: null,
   };
 }
 
@@ -37,8 +40,9 @@ const addDay = (days, day) => (days.includes(day) ? days : [...days, day]);
 // one is untouched (undo keeps it). k: his personal factor. pretest: recalled before being taught.
 // relearn: a go after missing the line earlier in the same sprint, which says little about memory, so
 // it does not grow it. primed: from the cue alone just after a go with the first letters, and slow:
-// typed right but much slower than usual; either grows memory by half as much.
-export function applyResult(state, { pass, day, time, mode, k = 1, pretest = false, relearn = false, primed = false, slow = false, proof = false }) {
+// typed right but much slower than usual; either grows memory by half as much. stall: the same word
+// wrong again, which does not grow it at all. closeWord: the word wrong, on a pass with one word wrong.
+export function applyResult(state, { pass, day, time, mode, k = 1, pretest = false, relearn = false, primed = false, slow = false, proof = false, stall = false, closeWord = null }) {
   const s = { ...state };
   // Any miss loses the proof, wherever it happens: the line has to be typed right again to count.
   if (!pass) s.proved = false;
@@ -60,7 +64,7 @@ export function applyResult(state, { pass, day, time, mode, k = 1, pretest = fal
   } else if (!pass) {
     s.lapses = (state.lapses || 0) + 1;
     s.stability = afterMiss(state.stability);
-  } else if (!relearn) {
+  } else if (!relearn && !stall) {
     const r = retrievability((time - state.lastTime) / HOUR, k * state.stability);
     const g = growth(state.stability, r, state.lapses || 0);
     s.stability = state.stability * (primed || slow ? 1 + (g - 1) * HELPED_GROWTH : g);
@@ -70,6 +74,7 @@ export function applyResult(state, { pass, day, time, mode, k = 1, pretest = fal
     s.status = 'review';
     s.learnedDay = day;
   }
+  s.closeWord = closeWord;
   s.lastResult = pass ? 'pass' : 'miss';
   s.lastDay = day;
   s.lastTime = time;

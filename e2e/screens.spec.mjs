@@ -184,6 +184,18 @@ for (const width of [393, 320]) {
   });
 }
 
+test('a phone on its side: the keypad leaves room for the line', async ({ page }) => {
+  await page.setViewportSize({ width: 568, height: 320 });
+  await importScript(page);
+  await page.getByRole('button', { name: 'Start learning' }).click();
+  await page.getByRole('button', { name: 'Try it' }).click();
+  await page.getByRole('group', { name: 'Who speaks next?' }).getByRole('button', { name: 'Keeper', exact: true }).click();
+  const pad = page.getByRole('group', { name: /Keypad/ });
+  await expect(pad).toBeVisible();
+  expect((await pad.boundingBox()).height).toBeLessThan(200);
+  expect(await sideways(page)).toBe(0);
+});
+
 test('big text on a small phone: the footer goes with the page, the ring fits, nothing pans, and words stay whole', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await importScript(page);
@@ -257,8 +269,8 @@ test('not four words is said at once, without asking the worker; a pasted code i
   expect(calls).toEqual([]);
   await field.fill(`Code: "${CODE}"`);
   await page.getByRole('button', { name: 'Unlock' }).click();
-  await expect(page.getByRole('heading', { name: 'Who are you?' })).toBeVisible();
-  await expect(page.getByText('Pick your name to get your lines.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Whose lines are you learning?' })).toBeVisible();
+  await expect(page.getByText('Pick your name, or the part you are covering.')).toBeVisible();
 });
 
 // The next pack asked for does not come until released.
@@ -282,7 +294,7 @@ async function upToDownload(page) {
   await page.getByRole('button', { name: 'Unlock' }).click();
   await page.getByRole('button', { name: 'Whole Company', exact: true }).click();
   await holdPack(page);
-  await page.getByRole('button', { name: 'Yes, I am Whole Company' }).click();
+  await page.getByRole('button', { name: 'Yes, these are my lines' }).click();
   await page.getByLabel('Your name').fill('Test Pupil');
   await page.getByRole('button', { name: 'Carry on' }).click();
   await expect(page.getByRole('heading', { name: 'Getting your lines' })).toBeVisible();
@@ -304,7 +316,7 @@ test('slow signal: given up and opened again, it goes straight to the names', as
   await upToDownload(page);
   await expect.poll(() => stored(page, 'keys')).toBeTruthy();
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Who are you?' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Whose lines are you learning?' })).toBeVisible();
 });
 
 test('a pack that comes during a round waits for the next Your lines, and says the lines have changed', async ({ page }) => {
@@ -392,9 +404,15 @@ test('Remove everything tells the worker to forget the reminders first', async (
   await page.getByRole('button', { name: 'No, start from the beginning' }).click();
   const calls = [];
   await fakeWorker(page, { calls });
-  await page.evaluate(() => window.offScript.store.set('push', { id: 'a-reminder' }));
+  // A phone with reminders on, as far as the app can tell.
+  await page.evaluate(async () => {
+    const reg = { pushManager: { getSubscription: async () => ({ endpoint: 'https://push.test/a', unsubscribe: async () => true }) } };
+    navigator.serviceWorker.getRegistration = async () => reg;
+    if (window.Notification) Object.defineProperty(Notification, 'permission', { get: () => 'granted' });
+    await window.offScript.store.set('push', { id: 'a-reminder' });
+  });
   await page.getByRole('button', { name: 'Settings' }).click();
-  await page.getByRole('button', { name: 'Not you? Remove everything' }).click();
+  await page.getByRole('button', { name: 'Remove everything from this phone' }).click();
   await page.getByRole('button', { name: 'Remove everything' }).click();
   await expect(page.getByLabel('Company code').or(page.getByRole('button', { name: 'Carry on without installing' }))).toBeVisible();
   expect(calls).toContain('/push/off');
@@ -462,7 +480,7 @@ test('each moment comes once ever, one at a time, and a dip is explained', async
 
   // Down, then back past 25%: no second go at the moment, and the dip has words.
   await learnt(page, 0.1);
-  await expect(page.getByText('Your % dipped because a line slipped. That is normal. Get it right again and it comes back.')).toBeVisible();
+  await expect(page.getByText('Your % dipped because a line slipped. That is normal. Get it right again on another day and it comes back.')).toBeVisible();
   await page.evaluate(() => window.offScript.go('today'));
   await expect(page.getByRole('heading', { name: 'Your lines' })).toBeVisible();
   await expect(page.getByText('Your % dipped', { exact: false })).toHaveCount(0);

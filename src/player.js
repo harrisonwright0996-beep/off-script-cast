@@ -79,6 +79,8 @@ export function createPlayer({ onMark, onReplay, onTime, onEnded, onError, resum
     },
     destroy() {
       audio.pause();
+      if (ms) ms.metadata = null;
+      if (ms) ms.playbackState = 'none';
       if (ms) for (const action of Object.keys(handlers)) {
         try {
           ms.setActionHandler(action, null);

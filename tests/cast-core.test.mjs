@@ -95,8 +95,10 @@ test('only typed, from the cue alone, off the ladder, earns proof', () => {
 
 test('a proof stays through right answers, a line said right twice still needs one, and any miss loses it', () => {
   const day = '2026-10-30';
+  const tomorrow = '2026-10-31';
   let s = applyResult(newState('x'), { pass: true, day, time: 1, mode: 'say' });
-  assert.equal(needsProof(s), true);
+  assert.equal(needsProof(s, day), false, 'not the day it was first met');
+  assert.equal(needsProof(s, tomorrow), true);
   s = applyResult(s, { pass: true, day, time: 2, mode: 'say' });
   assert.equal(s.status, 'review');
   assert.equal(isLearnt(s), false);
@@ -107,7 +109,8 @@ test('a proof stays through right answers, a line said right twice still needs o
   for (const mode of ['type', 'say', 'walk']) {
     const missed = applyResult(s, { pass: false, day, time: 5, mode });
     assert.equal(missed.proved, false, `a miss by ${mode}`);
-    assert.equal(needsProof(missed, day), true, 'so the next go from the cue is typed');
+    assert.equal(needsProof(missed, day), false, 'not the day it was missed');
+    assert.equal(needsProof(missed, tomorrow), true, 'so the next day the go from the cue is typed');
     const said = applyResult(missed, { pass: true, day, time: 6, mode: 'say' });
     assert.equal(isLearnt(said), false, 'and saying it does not win it back');
     assert.equal(isLearnt(applyResult(missed, { pass: true, day, time: 6, mode: 'walk' })), false, 'nor does a walk');
@@ -229,10 +232,10 @@ test('a line already known needs no teaching, but is not learnt until typed righ
 });
 
 test('the end of a round says what it gained: the rise in %, or else the lines on their way', () => {
-  assert.equal(gainLine(24, 28, 6), 'Up 4% to 28%.');
-  assert.equal(gainLine(0, 0, 6), '6 lines on their way.');
-  assert.equal(gainLine(0, 0, 1), '1 line on its way.');
-  assert.equal(gainLine(30, 28, 2), '2 lines on their way.', 'never a telling off, even after a drop');
+  assert.equal(gainLine(24, 28, 6), 'Up to 28%.');
+  assert.match(gainLine(0, 0, 6), /^6 lines on their way\. They count/);
+  assert.match(gainLine(0, 0, 1), /^1 line on its way\. It counts/);
+  assert.match(gainLine(30, 28, 2), /^2 lines on their way/, 'never a telling off, even after a drop');
   assert.equal(gainLine(30, 30, 0), null);
 });
 

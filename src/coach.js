@@ -17,6 +17,7 @@ export const COACH = {
 export const COACH_SPEECH = {
   ...COACH,
   intro: 'Here is your walk. Say your lines aloud. If you get a line wrong, or you are not sure, tap Missed. That shows the app what to bring back.',
+  end: 'That is the walk. When you have stopped, look at your phone and tap any you missed.',
 };
 
 export const STEPS = {
