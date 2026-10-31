@@ -9,6 +9,7 @@ const FILES = ['index.html', 'staff.html', 'styles.css', 'sw.js', 'manifest.webm
 const out = mkdtempSync(join(tmpdir(), 'off-script-cast-'));
 try {
   for (const f of FILES) cpSync(f, join(out, f), { recursive: true });
+  for (const f of ['styles.css', 'src', 'vendor']) cpSync(f, join(out, 'dashboard', f), { recursive: true }); // see staff.html
   execFileSync('npx', ['wrangler', 'pages', 'deploy', out, '--project-name', 'off-script-cast', '--branch', 'main', '--commit-dirty=true', '--force'], { stdio: 'inherit' });
 } finally {
   rmSync(out, { recursive: true });

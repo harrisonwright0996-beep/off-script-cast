@@ -8,8 +8,8 @@ const ls = (dir, ext) => readdirSync(new URL(dir + '/', root)).filter((f) => f.e
 
 test('the offline cache lists every app file, and only those', () => {
   const listed = [...read('sw.js').matchAll(/^\s+'([^']+)',$/gm)].map((m) => m[1]);
-  // docx.js, build.js and subset.js are only used on the laptop, to make packs.
-  const laptop = ['src/docx.js', 'src/cast/build.js', 'src/cast/subset.js'];
+  // docx.js, build.js and subset.js are only used on the laptop, to make packs; staff.js has its own address.
+  const laptop = ['src/docx.js', 'src/cast/build.js', 'src/cast/subset.js', 'src/ui/staff.js'];
   const want = ['./', 'styles.css', 'manifest.webmanifest', 'vendor/fflate.js', ...ls('src', '.js'), ...ls('src/cast', '.js'), ...ls('src/ui', '.js'), ...ls('icons', '.png')].filter((f) => !laptop.includes(f));
   assert.deepEqual([...listed].sort(), want.sort());
 });
@@ -58,4 +58,12 @@ test('a reminder never names a time to spend', () => {
 test('no italics anywhere', () => {
   assert.match(read('styles.css'), /font-style: normal !important/);
   for (const f of [...ls('src/ui', '.js'), 'index.html']) assert.doesNotMatch(read(f), /<(i|em)>|'(i|em)'/, `${f} uses no italic elements`);
+});
+
+test('the director\'s page loads nothing an old copy of the app could answer with a file of its own', () => {
+  const html = read('staff.html');
+  assert.match(html, /<script type="module" src="dashboard\/src\/ui\/staff\.js">/);
+  assert.match(html, /<link rel="stylesheet" href="dashboard\/styles\.css">/);
+  assert.doesNotMatch(html, /(src|href)="(src|styles\.css)/);
+  assert.match(read('tools/publish.mjs'), /\['styles\.css', 'src', 'vendor'\].*'dashboard'/);
 });

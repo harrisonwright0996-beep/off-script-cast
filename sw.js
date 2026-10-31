@@ -1,7 +1,7 @@
 // Offline: every app file is cached under one version name and served from the cache first.
 // A new version waits until Off Script asks for it (Update now on Today), so nothing reloads in the
 // middle of a sprint. Change VERSION with every release.
-const VERSION = 'off-script-cast-9';
+const VERSION = 'off-script-cast-10';
 const FILES = [
   './',
   'styles.css',
@@ -49,7 +49,6 @@ const FILES = [
   'src/ui/scenes.js',
   'src/ui/settings.js',
   'src/ui/sprint.js',
-  'src/ui/staff.js',
   'src/ui/stage.js',
   'src/ui/unlock.js',
   'src/ui/walk.js',
@@ -75,21 +74,13 @@ self.addEventListener('message', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
-  event.respondWith(answer(event));
+  const url = new URL(req.url);
+  if (req.method !== 'GET' || url.origin !== self.location.origin) return;
+  // The director's page has no Update now and has to match the worker, so it is never cached. Its
+  // code has its own address: no copy of this app, however old, holds anything there to mix with it.
+  if (/\/staff(\.html)?$|\/dashboard\//.test(url.pathname)) return;
+  event.respondWith(caches.match(req, { ignoreSearch: true }).then((hit) => hit || fetch(req)));
 });
-
-const isStaff = (url) => /\/staff(\.html)?$|\/ui\/staff\.js$/.test(new URL(url).pathname);
-const fromCache = (req) => caches.match(req, { ignoreSearch: true });
-
-// The director's page has no Update now and has to match the worker, so it and everything it loads
-// come from the network first. Pupils' screens are cache first.
-async function answer(event) {
-  const req = event.request;
-  const client = event.clientId ? await self.clients.get(event.clientId) : null;
-  if (isStaff(req.url) || (client && isStaff(client.url))) return fetch(req).catch(() => fromCache(req));
-  return (await fromCache(req)) || fetch(req);
-}
 
 // A reminder is an empty push: the words were saved on the phone the last time the app was used, so
 // they never leave it. A push must always show something.

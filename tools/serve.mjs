@@ -26,7 +26,7 @@ createServer(async (req, res) => {
     res.writeHead(302, { Location: BASE });
     return res.end();
   }
-  const rel = normalize(path.slice(BASE.length) || 'index.html');
+  const rel = normalize(path.slice(BASE.length) || 'index.html').replace(/^dashboard[/\\]/, ''); // as publish.mjs lays it out
   if (rel.startsWith('..') || !SERVED.some((s) => rel === s || rel.startsWith(s + sep))) {
     res.writeHead(404);
     return res.end('Not found');
