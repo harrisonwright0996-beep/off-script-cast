@@ -2,7 +2,7 @@
 // coded names; the cast list, opened here with the company code, turns them into names on this phone.
 import { h, clear, button, plural } from './dom.js';
 import { openCast, staffNumbers } from '../cast/client.js';
-import { cleanCode, deriveKeys } from '../cast/pack.js';
+import { cleanCode, deriveKeys, openText } from '../cast/pack.js';
 import { dayKey } from '../dates.js';
 
 const SAVED = 'castStaff';
@@ -32,18 +32,21 @@ const whenText = (day, today = dayKey(new Date())) => {
   return days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
 };
 
-// A member's row, or the same with no numbers yet: those not started come first, then the lowest %.
+// One row a person who has started, by the name they typed, and one for each part nobody has started
+// yet: those first, then the lowest %. An understudy shows beside the part they are learning.
 export function staffRows(members, rows) {
-  const byId = new Map(rows.map((r) => [r.id, r]));
-  return members
-    .map((m) => ({ name: m.name, ...byId.get(m.file) }))
-    .sort((a, b) => (a.percent ?? -1) - (b.percent ?? -1) || a.name.localeCompare(b.name));
+  const parts = new Map(members.map((m) => [m.file, m.name]));
+  const people = rows.filter((r) => parts.has(r.pack)).map((r) => ({ ...r, name: r.who ?? parts.get(r.pack), part: parts.get(r.pack) }));
+  const taken = new Set(people.map((r) => r.pack));
+  const nobody = members.filter((m) => !taken.has(m.file)).map((m) => ({ name: m.name, part: m.name }));
+  return [...nobody, ...people].sort((a, b) => (a.percent ?? -1) - (b.percent ?? -1) || a.name.localeCompare(b.name));
 }
 
 function rowView(r) {
+  const learning = r.name.toLowerCase() === r.part.toLowerCase() ? '' : `Learning ${r.part}. `;
   const said = r.percent === undefined
     ? 'Not started'
-    : `${r.learnt} of ${plural(r.total, 'line')} learnt, ${r.fading} fading. ${r.lastDay ? `Practised ${whenText(r.lastDay)}.` : 'Opened the app, no practice yet.'}`;
+    : `${learning}${r.learnt} of ${plural(r.total, 'line')} learnt, ${r.fading} fading. ${r.lastDay ? `Practised ${whenText(r.lastDay)}.` : 'Opened the app, no practice yet.'}`;
   return h(
     'li',
     {},
@@ -74,19 +77,22 @@ async function load(codes) {
   page('Cast progress', [h('p', { class: 'lead', role: 'status' }, 'Opening…')]);
   try {
     const rows = await staffNumbers(codes.staff);
-    const cast = await openCast(await deriveKeys(cleanCode(codes.company)));
+    const keys = await deriveKeys(cleanCode(codes.company));
+    const cast = await openCast(keys);
+    const named = await Promise.all(rows.map(async (r) => ({ ...r, who: await openText(keys.key, r.who).catch(() => null) })));
     remember(codes);
-    show(codes, staffRows(cast.members, rows));
+    show(codes, staffRows(cast.members, named));
   } catch (err) {
     codesScreen(PROBLEMS[err.code] || 'That did not work. Check you have signal, then try again.');
   }
 }
 
 function show(codes, rows) {
-  const started = rows.filter((r) => r.percent !== undefined);
+  const started = rows.filter((r) => r.percent !== undefined).length;
+  const parts = rows.length - started;
   const average = Math.floor(rows.reduce((n, r) => n + (r.percent ?? 0), 0) / rows.length);
   page('Cast progress', [
-    h('p', { class: 'lead' }, `${started.length} of ${rows.length} started. ${average}% on average.`),
+    h('p', { class: 'lead' }, `${started} started, ${plural(parts, 'part')} not started. ${average}% on average.`),
     h('ul', { class: 'staff-list' }, rows.map(rowView)),
     h('p', { class: 'help' }, 'A phone updates this when it next has signal, so an offline pupil may be further on than this shows.'),
     h('div', { class: 'stack' }, button('Refresh', () => load(codes), { class: 'btn primary' }), button('Forget this phone', () => (remember(null), codesScreen()))),

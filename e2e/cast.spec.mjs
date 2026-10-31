@@ -17,6 +17,8 @@ test('code in odd capitals and spacing works; only their lines arrive', async ({
   await expect(names).toHaveCount(2);
   await names.nth(1).click();
   await page.getByRole('button', { name: /^Yes, I am/ }).click();
+  await page.getByLabel('Your name').fill('Test Pupil');
+  await page.getByRole('button', { name: 'Carry on' }).click();
   await expect(page.getByRole('heading', { name: 'Already know some?' })).toBeVisible({ timeout: 30000 });
   const { all, speakers, clips } = await page.evaluate(async () => {
     const o = window.offScript;
@@ -262,6 +264,8 @@ test('screens to look at, on the invented play', async ({ page }, info) => {
   await shot('3-pick');
   await page.getByRole('button', { name: 'Whole Company', exact: true }).click();
   await page.getByRole('button', { name: 'Yes, I am Whole Company' }).click();
+  await page.getByLabel('Your name').fill('Test Pupil');
+  await page.getByRole('button', { name: 'Carry on' }).click();
   await expect(page.getByRole('heading', { name: 'Already know some?' })).toBeVisible({ timeout: 30000 });
   await shot('4-checkin');
   await page.getByRole('button', { name: 'No, start from the beginning' }).click();
@@ -340,7 +344,7 @@ test('typing is explained with the keypad; one wrong word on a long line passes,
   expect(seen).not.toMatch(/one (word|miss)|allowed|8 words|eight words|still (pass|count)/);
 });
 
-test('the director sees numbers once a phone has signal, and names only with both codes', async ({ page, context }) => {
+test('the director sees numbers once a phone has signal, and names only with both codes; two can learn one part', async ({ page, context, browser }) => {
   const progress = {};
   await fakeWorker(page, { progress });
   await enrol(page);
@@ -349,7 +353,8 @@ test('the director sees numbers once a phone has signal, and names only with bot
   await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
   await expect.poll(() => Object.values(progress).length).toBe(1);
   const [row] = Object.values(progress);
-  expect(Object.keys(row).sort()).toEqual(['fading', 'id', 'lastDay', 'learnt', 'percent', 'total']);
+  expect(Object.keys(row).sort()).toEqual(['fading', 'id', 'lastDay', 'learnt', 'pack', 'percent', 'total', 'who']);
+  expect(JSON.stringify(row)).not.toContain('Test Pupil');
   expect(row.percent).toBe(0);
 
   // No signal: nothing goes, and nothing is lost.
@@ -368,6 +373,14 @@ test('the director sees numbers once a phone has signal, and names only with bot
   await page.evaluate(() => window.offScript.go('today'));
   await expect.poll(() => Object.values(progress)[0].learnt).toBe(1);
 
+  // An understudy on the same part has a row of their own.
+  const other = await (await browser.newContext({ baseURL: test.info().project.use.baseURL })).newPage();
+  await fakeWorker(other, { progress });
+  await enrol(other, 'Whole Company', './', 'Sam Understudy');
+  await other.getByRole('button', { name: 'No, start from the beginning' }).click();
+  await expect.poll(() => Object.values(progress).length).toBe(2);
+  await other.context().close();
+
   await page.goto('staff.html');
   await page.getByLabel('Company code').fill(CODE);
   await page.getByLabel('Staff code').fill('wrong');
@@ -376,11 +389,31 @@ test('the director sees numbers once a phone has signal, and names only with bot
   await page.getByLabel('Company code').fill(CODE);
   await page.getByLabel('Staff code').fill(STAFF);
   await page.getByRole('button', { name: 'Open' }).click();
-  await expect(page.getByText(/^1 of \d+ started\./)).toBeVisible({ timeout: 30000 });
-  await expect(page.locator('.staff-list li').filter({ hasText: 'Whole Company' })).toContainText('Practised today');
+  await expect(page.getByText(/^2 started, \d+ parts? not started\./)).toBeVisible({ timeout: 30000 });
+  await expect(page.locator('.staff-list li').filter({ hasText: 'Test Pupil' })).toContainText('Learning Whole Company.');
+  await expect(page.locator('.staff-list li').filter({ hasText: 'Test Pupil' })).toContainText('Practised today');
+  await expect(page.locator('.staff-list li').filter({ hasText: 'Sam Understudy' })).toContainText('Learning Whole Company.');
   await expect(page.locator('.staff-list li').filter({ hasText: 'Not started' }).first()).toBeVisible();
   await page.reload();
-  await expect(page.getByText(/^1 of \d+ started\./)).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText(/^2 started,/)).toBeVisible({ timeout: 30000 });
   await page.getByRole('button', { name: 'Forget this phone' }).click();
   await expect(page.getByLabel('Staff code')).toBeVisible();
+});
+
+test('a phone that unlocked before names were asked for is asked once, and an empty name will not do', async ({ page }) => {
+  await enrol(page);
+  await page.getByRole('button', { name: 'No, start from the beginning' }).click();
+  await page.evaluate(async () => {
+    await window.offScript.store.del('myName');
+    await window.offScript.store.del('reported');
+  });
+  await page.reload();
+  await page.getByRole('button', { name: 'Carry on' }).click();
+  await expect(page.getByRole('alert')).toHaveText('Type your name to carry on.');
+  await page.getByLabel('Your name').fill('  Alex   Reed ');
+  await page.getByRole('button', { name: 'Carry on' }).click();
+  await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.offScript.store.get('myName'))).toBe('Alex Reed');
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
 });

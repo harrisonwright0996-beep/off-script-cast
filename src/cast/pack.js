@@ -34,6 +34,10 @@ export async function unseal(key, bytes) {
   return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u8.subarray(0, IV) }, await aes(key), u8.subarray(IV)));
 }
 
+// A short text, sealed the same way, as text the worker can keep and cannot read.
+export const sealText = async (key, text) => btoa(String.fromCharCode(...(await seal(key, new TextEncoder().encode(text)))));
+export const openText = async (key, sealed) => new TextDecoder().decode(await unseal(key, Uint8Array.from(atob(sealed), (c) => c.charCodeAt(0))));
+
 export async function tokenHash(token) {
   return hex(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))));
 }

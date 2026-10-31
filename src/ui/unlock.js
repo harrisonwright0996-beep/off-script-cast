@@ -72,7 +72,7 @@ export function showUnlock(ctx) {
     show(
       `Are you ${member.name}?`,
       [h('p', { class: 'lead' }, `You have ${plural(member.lines, 'line')} to learn, for every character you play.`)],
-      [button(`Yes, I am ${member.name}`, settled(() => download(keys, cast, member)), { class: 'btn primary' }), button('No, go back', settled(() => pick(keys, cast)))],
+      [button(`Yes, I am ${member.name}`, settled(() => askName(ctx, () => download(keys, cast, member))), { class: 'btn primary' }), button('No, go back', settled(() => pick(keys, cast)))],
     );
   }
 
@@ -123,7 +123,31 @@ export function showUnlock(ctx) {
 }
 
 // What goes off the phone, said before a name is picked and in Settings.
-export const SEEN = 'Your director can see how much you have learnt and when you last practised.';
+export const SEEN = 'Your director can see your name, how much you have learnt and when you last practised.';
+
+// The pupil's own name, typed: an understudy picks the part they are learning, so the part alone does
+// not say who this is. Sealed before it leaves the phone. Asked once, and of a phone that has none yet.
+export function askName(ctx, then, problem = null, typed = '') {
+  const input = h('input', { id: 'my-name', type: 'text', value: typed, maxlength: 40, autocomplete: 'off', autocapitalize: 'words', 'aria-invalid': problem ? 'true' : null });
+  const go = settled(async () => {
+    const name = input.value.trim().replace(/\s+/g, ' ');
+    if ((name.match(/\p{L}/gu) || []).length < 2) return askName(ctx, then, 'Type your name to carry on.', input.value);
+    await ctx.store.set('myName', name);
+    then();
+  });
+  input.addEventListener('keydown', (e) => e.key === 'Enter' && go());
+  clear(ctx.root).append(
+    screen({
+      title: 'What is your name?',
+      body: [
+        h('div', { class: 'field' }, h('label', { for: 'my-name' }, 'Your name'), input, h('p', { class: 'help' }, 'Your own first name and surname. Your director will see it.')),
+        problem ? h('p', { class: 'message', role: 'alert' }, problem) : null,
+      ],
+      footer: [button('Carry on', go, { class: 'btn primary' })],
+    }),
+  );
+  focusHeading(ctx.root);
+}
 
 // The pupil's own words, to tell a new script from a change to someone else's part or the audio.
 const wordsOf = (model) => JSON.stringify(model.items.map((it) => [it.id, it.text]));

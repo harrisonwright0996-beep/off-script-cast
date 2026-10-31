@@ -8,7 +8,7 @@ This is the company version of Off Script. A cast member adds it to their Home S
 
 * This repository holds code only: no script, no names, no audio and no company code. A privacy check runs before every push.
 * The packs are sealed on a laptop and held on a small worker. The worker cannot open them: it keeps only a hash of the token that the company code gives.
-* A phone sends the worker its latest numbers under its pack's coded name: % learnt, lines learnt and fading, and the day last practised. The director reads them at `/staff` with the company code and a staff code, and the names are matched on that phone. There are no accounts and no analytics.
+* A phone sends the worker its latest numbers: % learnt, lines learnt and fading, and the day last practised, with its pack's coded name and the pupil's typed name sealed with the company code. The director reads them at `/staff` with the company code and a staff code, and the names are opened on that phone. There are no accounts and no analytics.
 * A reminder is an empty push. The phone writes the words itself, so the worker never sees a message, a name or a line.
 
 ## Make and send the packs

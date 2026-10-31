@@ -6,7 +6,7 @@ import { report } from '../cast/progress.js';
 import { sync } from '../cast/reminders.js';
 import { reminderOffer } from './offer.js';
 import { scienceNote } from '../cast/science.js';
-import { applyWaitingPack, refreshPack } from './unlock.js';
+import { applyWaitingPack, askName, refreshPack } from './unlock.js';
 
 const MOMENTS = {
   25: 'A quarter of your lines learnt. The lights are coming up.',
@@ -42,6 +42,7 @@ export function showStage(ctx) {
 
   async function render() {
     if (ctx.nav !== nav) return;
+    if (ctx.member && !(await ctx.store.get('myName'))) return askName(ctx, render);
     await applyWaitingPack(ctx).catch(() => {});
     updated = updated || ctx.linesUpdated;
     ctx.linesUpdated = false;

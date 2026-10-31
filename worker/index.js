@@ -1,9 +1,9 @@
 // The cast's one small server. It hands sealed packs to phones that have the company code, sends
 // reminders, and keeps each pupil's latest numbers for the director. It never sees a name, a line or a
 // message: packs are sealed before they get here, it holds only hashes of the tokens, a reminder is an
-// empty push and the phone writes the words, and numbers come under the pack's coded name.
+// empty push and the phone writes the words, and a pupil's name comes sealed with the company code.
 // KV: file:<name> sealed bytes; sub:<id> { endpoint, nextAt, tries }, with nextAt in the metadata;
-// prog:<pack name>, an empty value with the numbers in the metadata, so one list reads them all.
+// prog:<id>, an empty value with the numbers in the metadata, so one list reads them all.
 // LIMIT: a rate limit by address, for wrong tokens and new subscriptions; it stores nothing here.
 // Secrets: TOKEN_HASH, STAFF_HASH, VAPID_PUBLIC, VAPID_PRIVATE_JWK, VAPID_SUB. CLOSED = '1' after the show: every
 // /f/ request answers 410, so each phone learns the pack is gone.
@@ -49,9 +49,9 @@ async function authorised(request, env) {
 // One pupil's numbers, of the right kind, or null. Nothing else in the body is kept.
 function progressRow(b, now) {
   const count = (n) => Number.isInteger(n) && n >= 0 && n <= 5000;
-  const good = /^p[a-f0-9]{32}$/.test(b?.id) && Number.isInteger(b.percent) && b.percent >= 0 && b.percent <= 100 && count(b.learnt) && count(b.total) && b.learnt <= b.total && count(b.fading);
+  const good = /^[a-f0-9]{32}$/.test(b?.id) && /^p[a-f0-9]{32}$/.test(b.pack) && /^[A-Za-z0-9+/=]{1,160}$/.test(b.who) && Number.isInteger(b.percent) && b.percent >= 0 && b.percent <= 100 && count(b.learnt) && count(b.total) && b.learnt <= b.total && count(b.fading);
   if (!good || (b.lastDay !== null && !/^\d{4}-\d{2}-\d{2}$/.test(b.lastDay))) return null;
-  return { id: b.id, percent: b.percent, learnt: b.learnt, total: b.total, fading: b.fading, lastDay: b.lastDay, seen: now };
+  return { id: b.id, pack: b.pack, who: b.who, percent: b.percent, learnt: b.learnt, total: b.total, fading: b.fading, lastDay: b.lastDay, seen: now };
 }
 
 // The director's view: every pupil's numbers, for the one staff token.

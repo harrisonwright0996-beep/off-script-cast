@@ -118,12 +118,14 @@ export async function open(page, url = './') {
 }
 
 // Unlocks, picks a member and starts from the beginning, as a pupil would.
-export async function enrol(page, name = 'Whole Company', url = './') {
+export async function enrol(page, name = 'Whole Company', url = './', who = 'Test Pupil') {
   await open(page, url);
   await page.getByLabel('Company code').fill(CODE);
   await page.getByRole('button', { name: 'Unlock' }).click();
   await page.getByRole('button', { name, exact: true }).click();
   await page.getByRole('button', { name: `Yes, I am ${name}` }).click();
+  await page.getByLabel('Your name').fill(who);
+  await page.getByRole('button', { name: 'Carry on' }).click();
   await expect(page.getByRole('heading', { name: 'Already know some?' })).toBeVisible({ timeout: 30000 });
 }
 

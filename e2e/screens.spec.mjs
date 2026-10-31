@@ -283,6 +283,8 @@ async function upToDownload(page) {
   await page.getByRole('button', { name: 'Whole Company', exact: true }).click();
   await holdPack(page);
   await page.getByRole('button', { name: 'Yes, I am Whole Company' }).click();
+  await page.getByLabel('Your name').fill('Test Pupil');
+  await page.getByRole('button', { name: 'Carry on' }).click();
   await expect(page.getByRole('heading', { name: 'Getting your lines' })).toBeVisible();
 }
 

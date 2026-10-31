@@ -267,12 +267,12 @@ test('setting the worker changes the address and the key, and nothing else', asy
   assert.equal(setWorker(before, 'https://off-script-cast.abc.workers.dev', 'KEY'), "export const WORKER = 'https://off-script-cast.abc.workers.dev';\nexport const VAPID_PUBLIC = 'KEY';\n");
 });
 
-const PROGRESS = { id: `p${'a'.repeat(32)}`, percent: 40, learnt: 8, total: 20, fading: 2, lastDay: '2026-11-03', name: 'never kept' };
+const PROGRESS = { id: 'a'.repeat(32), pack: `p${'b'.repeat(32)}`, who: 'c2VhbGVk', percent: 40, learnt: 8, total: 20, fading: 2, lastDay: '2026-11-03', name: 'never kept' };
 
 test('a phone reports its numbers with the company token, and nothing else is kept', async () => {
   const e = await env();
   assert.equal((await call(e, '/progress', { token: 'wrong', method: 'POST', body: PROGRESS })).status, 401);
-  for (const bad of [{ ...PROGRESS, percent: 101 }, { ...PROGRESS, id: 'pack' }, { ...PROGRESS, learnt: 21 }, { ...PROGRESS, lastDay: 'soon' }]) {
+  for (const bad of [{ ...PROGRESS, percent: 101 }, { ...PROGRESS, id: 'pack' }, { ...PROGRESS, pack: 'name' }, { ...PROGRESS, who: 'A plain name' }, { ...PROGRESS, learnt: 21 }, { ...PROGRESS, lastDay: 'soon' }]) {
     assert.equal((await call(e, '/progress', { method: 'POST', body: bad })).status, 400);
   }
   assert.equal((await call(e, '/progress', { method: 'POST', body: PROGRESS })).status, 204);
