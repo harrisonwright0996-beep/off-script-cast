@@ -67,3 +67,10 @@ test('the director\'s page loads nothing an old copy of the app could answer wit
   assert.doesNotMatch(html, /(src|href)="(src|styles\.css)/);
   assert.match(read('tools/publish.mjs'), /\['styles\.css', 'src', 'vendor'\].*'dashboard'/);
 });
+
+test('a new version waits for Update now only on a phone with lines to protect', () => {
+  const sw = read('sw.js');
+  assert.match(sw, /if \(!\(await hasLines\(\)\)\) await self\.skipWaiting\(\);/);
+  assert.match(sw, /old\.length && !\(await hasLines\(\)\)/);
+  assert.match(sw, /const hasLines = async \(\) => !!\(await saved\('script', true\)\)/);
+});
