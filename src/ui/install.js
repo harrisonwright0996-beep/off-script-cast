@@ -1,7 +1,7 @@
 // First open: the right install steps for this device. On iPhone the installed app keeps its own
 // storage, so a phone installs first and unlocks afterwards. Reminders need the installed app too.
 import { h, screen, button, announce } from './dom.js';
-import { thisDevice, mustInstall, safariHasDots } from '../device.js';
+import { thisDevice, mustInstall, safariMenu } from '../device.js';
 
 const BROWSER_FLAG = 'off-script-cast-in-browser';
 
@@ -34,7 +34,9 @@ const SHARE_STEPS = [
   'If you see Open as Web App, leave it on. Tap Add.',
   'Close Safari and open Off Script from your Home Screen.',
 ];
-const SAFARI = ['Tap the three dots next to the address bar.', ...SHARE_STEPS];
+const LINES_STEPS = ['Tap the lines on the left of the address bar.', 'Tap Share.', 'Tap View More.', 'Tap Add to Home Screen.', ...SHARE_STEPS.slice(2)];
+const DOTS_STEPS = ['Tap the three dots next to the address bar.', ...SHARE_STEPS];
+const SAFARI = ['Tap the lines or the three dots beside the address bar.', ...SHARE_STEPS];
 const CHROME_ANDROID = [
   'Tap the three dots at the top right of Chrome.',
   'Tap Add to Home screen or Install app.',
@@ -81,6 +83,16 @@ const addSheet = (word) =>
 
 const SAFARI_SHARE = () => sheet(row('Copy'), row('Add to Favourites'), row('Add to Home Screen', true));
 const SAFARI_ADD = () => addSheet('Add to Home Screen');
+const linesBar = (...mark) => bar(h('span', { class: 'demo-round' }, '‹'), h('span', { class: 'demo-pill' }, h('span', { class: 'demo-dots' }, '≡', ...mark), h('span', { class: 'demo-url-text' }, 'off-script-cast.pages.dev')), h('span', { class: 'demo-round' }, '⧉'));
+const action = (text, on = false) => h('span', { class: 'demo-action' }, h('span', { class: 'demo-round' }, on ? '⌄' : ''), text, on ? tap() : null);
+const LINES_FRAMES = [
+  () => [linesBar(tap())],
+  () => [sheet(row('Ask Siri'), row('Share', true), row('Add to Bookmarks'), row('Find on Page')), linesBar()],
+  () => [sheet(h('div', { class: 'demo-row' }, icon(), h('span', {}, 'Off Script')), h('div', { class: 'demo-actions' }, action('Copy'), action('Bookmark'), action('Reading List'), action('View More', true)))],
+  () => [sheet(row('Add Bookmark to…'), row('Add to Favourites'), row('Add to Quick Note'), row('Find on Page'), row('Add to Home Screen', true))],
+  SAFARI_ADD,
+  homeScreen,
+];
 const DOTS_FRAMES = [
   () => [bar(address(), h('span', { class: 'demo-dots' }, '•••', tap()))],
   () => [sheet(row('Share', true), row('Add to Bookmarks'), row('Find on Page')), bar(address(), h('span', { class: 'demo-dots' }, '•••'))],
@@ -141,7 +153,8 @@ function demo(steps, frames) {
 function shownSteps(kind, info) {
   if (kind === 'android-chrome') return demo(info.steps, CHROME_FRAMES);
   if (kind !== 'ios-safari') return [list(info.steps)];
-  return safariHasDots(navigator.userAgent) ? demo(SAFARI, DOTS_FRAMES) : demo(SHARE_STEPS, SHARE_FRAMES);
+  const safari = { lines: [LINES_STEPS, LINES_FRAMES], dots: [DOTS_STEPS, DOTS_FRAMES], share: [SHARE_STEPS, SHARE_FRAMES] };
+  return demo(...safari[safariMenu(navigator.userAgent)]);
 }
 
 export function showInstall(ctx) {
@@ -195,8 +208,8 @@ export function showInstall(ctx) {
   ctx.root.append(
     screen({
       title: 'Install Off Script',
-      body: [h('p', { class: 'lead' }, info.lead), ...shownSteps(kind, info), kind === 'ios-safari' ? h('p', { class: 'help' }, 'Looks different? Share is the square with an arrow, at the bottom of the screen, or the top on an iPad. Already added it? Open Off Script from your Home Screen.') : null, info.copy ? button('Copy link', copy, { class: 'btn' }) : null, said, others, all],
-      footer: [install, kind.startsWith('ios') || kind === 'in-app' ? h('p', { class: 'help' }, 'If you carry on here and install later, you will start again.') : null, button('Carry on without installing', carryOn, { class: 'btn link' })].filter(Boolean),
+      // No footer: the steps have the whole page, with nothing fixed over them.
+      body: [h('p', { class: 'lead' }, info.lead), install, ...shownSteps(kind, info), kind === 'ios-safari' ? h('p', { class: 'help' }, 'Looks different? Share is the square with an arrow, at the bottom of the screen, or the top on an iPad. Already added it? Open Off Script from your Home Screen.') : null, info.copy ? button('Copy link', copy, { class: 'btn' }) : null, said, others, all, kind.startsWith('ios') || kind === 'in-app' ? h('p', { class: 'help' }, 'If you carry on here and install later, you will start again.') : null, button('Carry on without installing', carryOn, { class: 'btn link' })].filter(Boolean),
     }),
   );
 }

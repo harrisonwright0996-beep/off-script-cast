@@ -2,7 +2,7 @@
 // A new version waits until Off Script asks for it (Update now on Today), so nothing reloads in the
 // middle of a sprint. A phone with no lines on it has nothing to interrupt, and no Update now to tap,
 // so it takes a new version at once. Change VERSION with every release.
-const VERSION = 'off-script-cast-12';
+const VERSION = 'off-script-cast-13';
 const FILES = [
   './',
   'styles.css',

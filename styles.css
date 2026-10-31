@@ -161,7 +161,7 @@ a {
   outline-offset: 2px;
 }
 h1:focus-visible {
-  outline-offset: 4px;
+  outline: none; /* the app moves focus here for each new screen; a box round the title says nothing */
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -931,6 +931,14 @@ h1:focus-visible {
 .demo-bar { display: flex; align-items: center; justify-content: center; gap: 0.5em; min-height: 3em; padding: 0.4em 0.6em; background: #e3e3e8; }
 .demo-top { position: absolute; top: 0; left: 0; right: 0; }
 .demo-address { flex: 1; min-width: 0; overflow: hidden; padding: 0.3em 0.6em; font-size: 0.75em; white-space: nowrap; text-overflow: ellipsis; background: #fff; border-radius: 1em; }
+.demo-round { display: grid; place-items: center; flex: none; width: 2em; height: 2em; font-weight: 700; background: #fff; border-radius: 50%; }
+.demo-pill { flex: 1; min-width: 0; display: flex; align-items: center; gap: 0.5em; padding: 0.3em 0.6em; background: #fff; border-radius: 1.2em; }
+.demo-url-text { min-width: 0; overflow: hidden; font-size: 0.7em; white-space: nowrap; text-overflow: ellipsis; }
+.demo-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.2em; padding: 0.5em 0.3em; border-top: 1px solid #e3e3e8; }
+.demo-action { position: relative; display: grid; justify-items: center; gap: 0.2em; font-size: 0.6em; text-align: center; }
+.demo-action .demo-round { background: #e3e3e8; }
+.demo-action .demo-tap { top: 1.7em; right: 50%; width: 3.4em; height: 3.4em; margin-top: -1.7em; margin-right: -1.7em; }
+.demo-add { display: inline-block; }
 .demo-url { margin: 0 auto auto; padding: 0.5em; font-size: 0.75em; }
 .demo-dots, .demo-share, .demo-add { position: relative; font-weight: 700; }
 .demo-share { display: grid; place-items: center; width: 1.8em; height: 1.8em; border: 2px solid #1a4d8f; border-radius: 0.3em; color: #1a4d8f; }

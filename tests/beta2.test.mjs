@@ -11,7 +11,7 @@ import { newState } from '../src/state.js';
 import { nextNudge } from '../src/cast/reminders.js';
 import { chaseList, sameFirstName, sceneAverages, sceneList, staffRows } from '../src/ui/staff.js';
 import { sceneLine } from '../src/cast/progress.js';
-import { safariHasDots } from '../src/device.js';
+import { safariMenu } from '../src/device.js';
 import { roundMinutes } from '../src/settings.js';
 import { handle, tick } from '../worker/index.js';
 import { tokenHash } from '../src/cast/pack.js';
@@ -230,8 +230,10 @@ test('the chase list says who and why, and keeps parts with no one on them in on
   });
 });
 
-test('Safari 26 keeps Share behind the three dots; older Safari has it on the bar', () => {
-  assert.equal(safariHasDots('Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) Version/26.0 Mobile/15E148 Safari/604.1'), true);
-  assert.equal(safariHasDots('Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) Version/17.5 Mobile/15E148 Safari/604.1'), false);
-  assert.equal(safariHasDots('nothing to go on'), false);
+test('the install steps follow where each Safari keeps Share', () => {
+  const ua = (v) => `Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) Version/${v} Mobile/15E148 Safari/604.1`;
+  assert.equal(safariMenu(ua('27.1')), 'lines');
+  assert.equal(safariMenu(ua('26.0')), 'dots');
+  assert.equal(safariMenu(ua('17.5')), 'share');
+  assert.equal(safariMenu('nothing to go on'), 'share');
 });

@@ -205,6 +205,24 @@ test('code again after removing everything: the phone is clean', async ({ page }
   await expect(page.getByLabel('Company code').or(page.getByRole('button', { name: 'Carry on without installing' }))).toBeVisible();
 });
 
+test.describe('on the latest Safari', () => {
+  test.use({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.1 Mobile/15E148 Safari/604.1' });
+  test('the steps are those of the real phone, and nothing sits over them', async ({ page }, info) => {
+    test.skip(info.project.name !== 'webkit', 'the phone install screen shows only on an iPhone');
+    await fakeWorker(page);
+    await page.goto('./');
+    await expect(page.locator('.demo-steps li')).toHaveText([/^Tap the lines/, 'Tap Share.', 'Tap View More.', 'Tap Add to Home Screen.', /Tap Add\.$/, /^Close Safari/]);
+    await expect(page.locator('footer')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Pause' }).click();
+    for (let i = 0; i < 6; i++) {
+      await page.locator('.demo').screenshot({ path: `shots/webkit-lines-${i}.png` });
+      await page.getByRole('button', { name: 'Next' }).click();
+    }
+    await page.locator('.demo-steps li').last().scrollIntoViewIfNeeded();
+    await expect(page.locator('.demo-steps li').last()).toBeInViewport();
+  });
+});
+
 test('the install screen fits the device', async ({ page }, info) => {
   await fakeWorker(page);
   await page.goto('./');

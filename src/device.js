@@ -15,8 +15,12 @@ export function detect({ ua = '', platform = '', touch = 0, standalone = false }
   return 'desktop';
 }
 
-// Safari 26 keeps Share behind three dots beside the address bar; before that, it was on the bar.
-export const safariHasDots = (ua) => Number(/Version\/(\d+)/.exec(ua)?.[1] ?? 0) >= 26;
+// Where Safari keeps Share. Each version moves it: behind the lines left of the address bar from 27,
+// behind three dots right of it in 26, and on the bar before that.
+export function safariMenu(ua) {
+  const version = Number(/Version\/(\d+)/.exec(ua)?.[1] ?? 0);
+  return version >= 27 ? 'lines' : version === 26 ? 'dots' : 'share';
+}
 
 export const thisDevice = () =>
   detect({
