@@ -68,9 +68,9 @@ test('the director\'s page loads nothing an old copy of the app could answer wit
   assert.match(read('tools/publish.mjs'), /\['styles\.css', 'src', 'vendor'\].*'dashboard'/);
 });
 
-test('a new version takes over at once, and only a page with no lines to protect is sent to it', () => {
+test('a new version takes over at once, and sends a page with no lines, or one too old to restart itself', () => {
   const sw = read('sw.js');
   assert.match(sw, /addAll\(FILES\);\n\s+await self\.skipWaiting\(\);/);
-  assert.match(sw, /old\.length && !\(await hasLines\(\)\)/);
+  assert.match(sw, /old\.length && \(!\(await hasLines\(\)\) \|\| \(old\.some\(isStuck\)/);
   assert.match(sw, /const hasLines = async \(\) => !!\(await saved\('script', true\)\)/);
 });

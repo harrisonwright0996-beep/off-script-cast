@@ -1,8 +1,13 @@
 // Offline: every app file is cached under one version name and served from the cache first.
-// A new version takes over as soon as it is here. That does not disturb a round or a walk: an open page
-// keeps what it has loaded, and starts again by itself at the next Your lines. A page with no lines
-// has nothing to interrupt, so it is sent to the new version at once. Change VERSION with every release.
-const VERSION = 'off-script-cast-16';
+// A new version takes over as soon as it is here, and every update restarts the app with no tap. That
+// does not disturb a round or a walk: an open page keeps what it has loaded, and starts again by itself
+// as soon as nothing is under way (app.js, stage.js). A page with no lines has nothing to interrupt, so
+// it is sent to the new version at once. Change VERSION with every release.
+const VERSION = 'off-script-cast-17';
+// Pages from before version 17 may not start again by themselves, so this one sends them, unless a
+// walk is under way: the page would stop its audio. A round loses nothing: each answer is saved.
+const LAST_STUCK = 16;
+const isStuck = (key) => Number(/^off-script-cast-(\d+)$/.exec(key)?.[1] ?? Infinity) <= LAST_STUCK;
 const FILES = [
   './',
   'styles.css',
@@ -77,7 +82,7 @@ self.addEventListener('activate', (event) => {
       for (const key of old) await caches.delete(key);
       await self.clients.claim();
       // An open page is still the old version: an install screen would go on showing old steps.
-      if (old.length && !(await hasLines())) {
+      if (old.length && (!(await hasLines()) || (old.some(isStuck) && !(await saved('walkDraft', true))))) {
         for (const client of await self.clients.matchAll({ type: 'window' })) if (!NOT_CACHED.test(new URL(client.url).pathname)) client.navigate(client.url).catch(() => {});
       }
     })(),

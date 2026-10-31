@@ -22,6 +22,9 @@ import { PEEK_GAP, learntPercent } from './cast/proof.js';
 import { addSeconds, cleanStreak, creditFor, noteSlips } from './cast/streak.js';
 import { ENDS } from './cast/config.js';
 
+// A new version restarts the app on these, as it does on Your lines (stage.js). Everywhere else
+// something may be under way: a round, a walk, a scene read aloud, or typing.
+const AT_REST = new Set(['more', 'badges', 'scenes', 'scene', 'choose']);
 const EVENT_DAYS = 9; // the plan looks back this far
 const DB = 'off-script-cast';
 
@@ -149,6 +152,8 @@ async function boot() {
     },
 
     async go(name, params = {}) {
+      if (ctx.update && AT_REST.has(name)) return location.reload();
+      ctx.screen = name;
       ctx.nav += 1; // a screen still drawing can tell it has been left
       if (ctx.cleanup) ctx.cleanup();
       ctx.cleanup = null;
@@ -185,6 +190,7 @@ function registerServiceWorker(ctx) {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (charged) {
       ctx.update = true;
+      if (AT_REST.has(ctx.screen)) return location.reload();
       document.dispatchEvent(new CustomEvent('offscript:update'));
     }
     charged = true;
