@@ -1,7 +1,7 @@
 // The director's page: who has started, and how far they have got. The worker sends numbers under
 // coded names; the cast list, opened here with the company code, turns them into names on this phone.
 import { h, clear, button, plural } from './dom.js';
-import { openCast, openSceneLines, staffNumbers, staffRemove } from '../cast/client.js';
+import { openCast, openSceneLines, staffNumbers, staffOwner, staffRemove } from '../cast/client.js';
 import { cleanCode, deriveKeys, openText } from '../cast/pack.js';
 import { dayKey } from '../dates.js';
 
@@ -57,6 +57,8 @@ const whenText = (day, today) => {
 const firstName = (name) => name.trim().split(/\s+/)[0].toLowerCase().replace(/[‘’]/g, "'");
 // Whether someone is the pupil a part is named after, not an understudy on it: Ella Brown on Ella B.
 export const sameFirstName = (a, b) => firstName(a) === firstName(b);
+// Whose part it is: the director's choice if there is one, otherwise the name they typed.
+export const ownsPart = (r) => !!r.part && (r.owner ?? sameFirstName(r.name, r.part));
 
 // Not heard of, or not practised, for a week: worth asking. A phone offline a while looks the same.
 const lastHeard = (r) => dayKey(new Date(Math.max(r.seen || 0, r.lastDay ? new Date(r.lastDay).getTime() : 0)));
@@ -71,7 +73,7 @@ export function staffRows(members, rows, today = dayKey(new Date())) {
     const part = parts.get(r.pack) ?? null;
     return { ...r, name: r.who ?? part ?? 'Someone', part };
   });
-  const taken = new Set(people.filter((r) => r.part && sameFirstName(r.name, r.part)).map((r) => r.pack));
+  const taken = new Set(people.filter(ownsPart).map((r) => r.pack));
   const nobody = members.filter((m) => !taken.has(m.file)).map((m) => ({ name: m.name, part: m.name }));
   const rank = (r) => (r.percent === undefined ? 0 : isQuiet(r, today) ? 1 : 2);
   return [...nobody, ...people].sort((a, b) => rank(a) - rank(b) || (a.percent ?? -1) - (b.percent ?? -1) || a.name.localeCompare(b.name));
@@ -103,7 +105,7 @@ export function sceneAverages(rows, counts) {
     let learnt = 0;
     for (const [pack, scenes] of Object.entries(counts.parts)) {
       if (!scenes[key]) continue;
-      const own = rows.filter((r) => r.pack === pack && r.percent !== undefined && r.part && sameFirstName(r.name, r.part));
+      const own = rows.filter((r) => r.pack === pack && r.percent !== undefined && ownsPart(r));
       const percents = own.map((r) => (r.scenes ? (sceneList(r.scenes).find((s) => s.label === label(key))?.percent ?? 0) : r.percent));
       lines += scenes[key];
       learnt += (scenes[key] * Math.max(0, ...percents)) / 100;
@@ -135,8 +137,25 @@ const hide = (id) => {
 
 let sceneCounts = null; // without it the Scenes section stays away: a wrong number is worse than none
 
+// The same lag for the choice of who counts for a part.
+const OWNERS = 'off-script-owners';
+const ownersNow = () => {
+  try {
+    return Object.fromEntries(Object.entries(JSON.parse(sessionStorage.getItem(OWNERS)) || {}).filter(([, o]) => Date.now() - o.at < GONE_FOR));
+  } catch {
+    return {};
+  }
+};
+const noteOwner = (id, owner) => {
+  try {
+    sessionStorage.setItem(OWNERS, JSON.stringify({ ...ownersNow(), [id]: { owner, at: Date.now() } }));
+  } catch {
+    // private browsing: the row may show the old way for a moment longer
+  }
+};
+
 function rowView(r, codes) {
-  const left = !r.part ? 'No longer on the cast list. ' : sameFirstName(r.name, r.part) ? '' : `On ${r.part}'s lines. `;
+  const left = !r.part ? 'No longer on the cast list. ' : ownsPart(r) ? '' : `On ${r.part}'s lines. `;
   const onWay = r.onWay ? `, ${r.onWay} more on the way` : '';
   const practised = r.lastDay ? `Practised ${whenText(r.lastDay)}.` : 'Opened the app, no practice yet.';
   const heard = r.seen && daysSince(lastHeard(r)) >= 2 ? ` Last heard from ${whenText(lastHeard(r))}.` : '';
@@ -161,6 +180,18 @@ function rowView(r, codes) {
         }
       }, { class: 'btn link' })
     : null;
+  // Not offered to someone the name already matches: there is nothing to put right.
+  const owner = r.id && r.part && (r.owner || !ownsPart(r))
+    ? button(ownsPart(r) ? `Stop counting for ${r.part}` : `Count for ${r.part}`, async () => {
+        try {
+          await staffOwner(codes.staff, r.id, !ownsPart(r));
+          noteOwner(r.id, !ownsPart(r));
+          load(codes);
+        } catch {
+          owner.textContent = 'Could not change this. Check you have signal.';
+        }
+      }, { class: 'btn link' })
+    : null;
   return h(
     'li',
     {},
@@ -171,6 +202,7 @@ function rowView(r, codes) {
     r.scenes
       ? h('details', { class: 'scene-pcs' }, h('summary', {}, 'Scene by scene'), h('ul', {}, sceneList(r.scenes).map((s) => h('li', {}, h('span', {}, s.label), h('span', {}, `${s.percent}%`)))))
       : null,
+    owner,
     remove,
   );
 }
@@ -204,6 +236,7 @@ async function load(codes, shown = null, keep = keeping()) {
   page('Cast progress', [h('p', { class: 'lead', role: 'status' }, 'Opening…')]);
   try {
     const removed = removedNow();
+    const chosen = ownersNow();
     const rows = (await staffNumbers(codes.staff)).filter((r) => !removed[r.id]);
     const keys = await deriveKeys(cleanCode(codes.company));
     const cast = await openCast(keys);
@@ -211,6 +244,7 @@ async function load(codes, shown = null, keep = keeping()) {
     const named = await Promise.all(
       rows.map(async (r) => ({
         ...r,
+        owner: chosen[r.id]?.owner ?? r.owner,
         who: await openText(keys.key, r.who).catch(() => undefined),
         scenes: r.scenes ? await openText(keys.key, r.scenes).catch(() => undefined) : undefined,
       })),

@@ -10,7 +10,7 @@ import { tokenize } from '../src/tokens.js';
 import { newState } from '../src/state.js';
 import { nextNudge } from '../src/cast/reminders.js';
 import { sceneLines } from '../src/cast/build.js';
-import { chaseList, sameFirstName, sceneAverages, sceneList, staffRows } from '../src/ui/staff.js';
+import { chaseList, ownsPart, sameFirstName, sceneAverages, sceneList, staffRows } from '../src/ui/staff.js';
 import { sceneLine } from '../src/cast/progress.js';
 import { safariMenu } from '../src/device.js';
 import { handle, tick } from '../worker/index.js';
@@ -176,6 +176,29 @@ test('a row can be taken off by its phone or the director, and bad values are re
   assert.equal((await send(e, '/staff/remove', { id: 'e'.repeat(32) })).status, 401);
   assert.equal((await send(e, '/staff/remove', { id: 'e'.repeat(32) }, { 'x-staff-token': 'staff' })).status, 204);
   assert.equal(e.KV.m.size, 0);
+});
+
+test('the director chooses who counts for a part, and the phone cannot change it', async () => {
+  const e = await worker();
+  await send(e, '/progress', ROW);
+  const staff = { 'x-staff-token': 'staff' };
+  assert.equal((await send(e, '/staff/owner', { id: ROW.id, owner: true })).status, 401);
+  assert.equal((await send(e, '/staff/owner', { id: ROW.id, owner: 'yes' }, staff)).status, 400);
+  assert.equal((await send(e, '/staff/owner', { id: 'e'.repeat(32), owner: true }, staff)).status, 404);
+  assert.equal((await send(e, '/staff/owner', { id: ROW.id, owner: true }, staff)).status, 204);
+  assert.match(JSON.stringify([...e.KV.m.entries()]), /"owner":true/);
+  assert.match(JSON.stringify([...e.KV.m.entries()]), /"percent":10/, 'the numbers stay');
+  await e.KV.put(`prog:${ROW.id}`, '', { metadata: { owner: true, seen: 0 } }); // long enough ago to be written again
+  assert.equal((await send(e, '/progress', { ...ROW, percent: 20, owner: false })).status, 204);
+  assert.match(JSON.stringify([...e.KV.m.entries()]), /"owner":true/);
+  assert.match(JSON.stringify([...e.KV.m.entries()]), /"percent":20/);
+});
+
+test('the name a pupil typed decides whose part it is, until the director says otherwise', () => {
+  const rows = staffRows([{ name: 'Ella B.', file: 'a' }], [{ pack: 'a', who: 'Elle Brown', percent: 30, owner: true }]);
+  assert.equal(rows.length, 1, 'no one is left to chase for the part');
+  assert.equal(ownsPart({ part: 'Ella B.', name: 'Ella Brown', owner: false }), false);
+  assert.equal(ownsPart({ part: null, name: 'Ella Brown', owner: true }), false);
 });
 
 test('after the show nothing is sent and what is left goes', async () => {

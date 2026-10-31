@@ -83,5 +83,11 @@ export async function staffRemove(code, id) {
   if (!res.ok) throw new CastError('offline');
 }
 
+// Whether this row counts as the part's own pupil, whatever name they typed.
+export async function staffOwner(code, id, owner) {
+  const res = await fetch(`${WORKER}/staff/owner`, { method: 'POST', headers: { 'x-staff-token': code.trim(), 'content-type': 'application/json' }, body: JSON.stringify({ id, owner }) });
+  if (!res.ok) throw new CastError('offline');
+}
+
 export const post = (path, token, body) =>
   fetch(`${WORKER}${path}`, { method: 'POST', headers: { 'x-cast-token': token, 'content-type': 'application/json' }, body: JSON.stringify(body) });

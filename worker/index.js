@@ -93,13 +93,21 @@ export async function handle(request, env) {
   const reply = (status, body = null, extra = {}) => new Response(body, { status, headers: { ...head, ...extra } });
   // After the show. A preflight above still passes, or the browser would never see this answer.
   if (env.CLOSED === '1' && (url.pathname.startsWith('/f/') || url.pathname === '/progress')) return reply(410);
-  if (url.pathname === '/staff' || url.pathname === '/staff/remove') {
+  if (url.pathname === '/staff' || url.pathname === '/staff/remove' || url.pathname === '/staff/owner') {
     const right = !!env.STAFF_HASH && (await sha256(request.headers.get('x-staff-token') || '')) === env.STAFF_HASH;
     if (!right) return reply((await withinLimit(request, env)) ? 401 : 429);
     if (url.pathname === '/staff' && request.method === 'GET') return reply(200, JSON.stringify(await staffRows(env)), { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     if (url.pathname === '/staff' || request.method !== 'POST') return reply(405);
-    const id = (await request.json().catch(() => null))?.id;
+    const asked = await request.json().catch(() => null);
+    const id = asked?.id;
     if (!isId(id)) return reply(400);
+    if (url.pathname === '/staff/owner') {
+      if (typeof asked.owner !== 'boolean') return reply(400);
+      const { metadata: row } = await env.KV.getWithMetadata(`prog:${id}`);
+      if (!row) return reply(404);
+      await env.KV.put(`prog:${id}`, '', { metadata: { ...row, owner: asked.owner }, expiration: ROW_ENDS });
+      return reply(204);
+    }
     await env.KV.delete(`prog:${id}`);
     return reply(204);
   }
@@ -126,6 +134,7 @@ export async function handle(request, env) {
     // Too soon after the last one: the phone keeps the numbers and tries again when next it can.
     const { metadata: old } = await env.KV.getWithMetadata(`prog:${row.id}`);
     if (old && row.seen - old.seen < ROW_GAP) return reply(429);
+    if (old?.owner !== undefined) row.owner = old.owner; // the director's choice: a phone cannot change it
     await env.KV.put(`prog:${row.id}`, '', { metadata: row, expiration: ROW_ENDS });
     return reply(204);
   }

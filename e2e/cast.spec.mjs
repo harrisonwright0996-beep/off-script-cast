@@ -432,6 +432,15 @@ test('the director sees numbers once a phone has signal, and names only with bot
   await expect(page.locator('.staff-list li').filter({ hasText: 'Test Pupil' }).locator('.scene-pcs li').first()).toBeVisible();
   await page.reload();
   await expect(page.getByText(/^2 started,/)).toBeVisible({ timeout: 30000 });
+  // A name spelt differently: the director says who the part belongs to, and a phone cannot undo it.
+  const pupil = page.locator('.staff-list li').filter({ hasText: 'Test Pupil' });
+  await expect(page.locator('p', { hasText: 'Not started yet' })).toContainText('Whole Company');
+  await pupil.getByRole('button', { name: 'Count for Whole Company' }).click();
+  await expect(pupil.getByRole('button', { name: 'Stop counting for Whole Company' })).toBeVisible({ timeout: 30000 });
+  await expect(pupil).not.toContainText("On Whole Company's lines.");
+  await expect(page.locator('p', { hasText: 'Not started yet' })).not.toContainText('Whole Company');
+  await page.reload();
+  await expect(pupil.getByRole('button', { name: 'Stop counting for Whole Company' })).toBeVisible({ timeout: 30000 });
   // A row left by a mistake goes, after a second tap, and no one else's does. The worker's list can
   // still hold it for a minute or so: it stays gone from here, even opened again.
   lagging = true;

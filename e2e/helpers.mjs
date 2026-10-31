@@ -93,6 +93,12 @@ export async function fakeWorker(page, { calls = [], progress = {}, listLags = (
       if (!listLags()) delete seen.progress[JSON.parse(body).id]; // listLags: as the real list, for a minute or so
       return { status: 204 };
     }
+    if (path === '/staff/owner') {
+      if (headers['x-staff-token'] !== STAFF) return { status: 401 };
+      const { id, owner } = JSON.parse(body);
+      seen.progress[id].owner = owner;
+      return { status: 204 };
+    }
     if (path === '/staff') return headers['x-staff-token'] === STAFF ? { status: 200, bytes: Buffer.from(JSON.stringify(Object.values(seen.progress))).toString('base64') } : { status: 401 };
     if (headers['x-cast-token'] !== keys.token) return { status: 401 };
     if (path === '/progress') {
