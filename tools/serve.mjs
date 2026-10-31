@@ -18,7 +18,7 @@ const TYPES = {
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
 };
-const SERVED = ['index.html', 'styles.css', 'manifest.webmanifest', 'sw.js', 'src', 'vendor', 'icons'];
+const SERVED = ['index.html', 'staff.html', 'styles.css', 'manifest.webmanifest', 'sw.js', 'src', 'vendor', 'icons'];
 
 createServer(async (req, res) => {
   const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);

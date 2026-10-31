@@ -1,9 +1,11 @@
-// The cast's one small server. It hands sealed packs to phones that have the company code, and sends
-// reminders. It never sees a name, a line or a message: packs are sealed before they get here, it
-// holds only a hash of the token, and a reminder is an empty push; the phone writes the words.
-// KV: file:<name> sealed bytes; sub:<id> { endpoint, nextAt, tries }, with nextAt in the metadata.
+// The cast's one small server. It hands sealed packs to phones that have the company code, sends
+// reminders, and keeps each pupil's latest numbers for the director. It never sees a name, a line or a
+// message: packs are sealed before they get here, it holds only hashes of the tokens, a reminder is an
+// empty push and the phone writes the words, and numbers come under the pack's coded name.
+// KV: file:<name> sealed bytes; sub:<id> { endpoint, nextAt, tries }, with nextAt in the metadata;
+// prog:<pack name>, an empty value with the numbers in the metadata, so one list reads them all.
 // LIMIT: a rate limit by address, for wrong tokens and new subscriptions; it stores nothing here.
-// Secrets: TOKEN_HASH, VAPID_PUBLIC, VAPID_PRIVATE_JWK, VAPID_SUB. CLOSED = '1' after the show: every
+// Secrets: TOKEN_HASH, STAFF_HASH, VAPID_PUBLIC, VAPID_PRIVATE_JWK, VAPID_SUB. CLOSED = '1' after the show: every
 // /f/ request answers 410, so each phone learns the pack is gone.
 const HOUR = 3600;
 const DAY = 86400000;
@@ -21,7 +23,7 @@ async function sha256(s) {
 
 const cors = (env) => ({
   'Access-Control-Allow-Origin': env.ORIGIN,
-  'Access-Control-Allow-Headers': 'content-type, x-cast-token',
+  'Access-Control-Allow-Headers': 'content-type, x-cast-token, x-staff-token',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   Vary: 'Origin',
 });
@@ -44,6 +46,26 @@ async function authorised(request, env) {
   return { ok: false, status: (await withinLimit(request, env)) ? 401 : 429 };
 }
 
+// One pupil's numbers, of the right kind, or null. Nothing else in the body is kept.
+function progressRow(b, now) {
+  const count = (n) => Number.isInteger(n) && n >= 0 && n <= 5000;
+  const good = /^p[a-f0-9]{32}$/.test(b?.id) && Number.isInteger(b.percent) && b.percent >= 0 && b.percent <= 100 && count(b.learnt) && count(b.total) && b.learnt <= b.total && count(b.fading);
+  if (!good || (b.lastDay !== null && !/^\d{4}-\d{2}-\d{2}$/.test(b.lastDay))) return null;
+  return { id: b.id, percent: b.percent, learnt: b.learnt, total: b.total, fading: b.fading, lastDay: b.lastDay, seen: now };
+}
+
+// The director's view: every pupil's numbers, for the one staff token.
+async function staffRows(env) {
+  const rows = [];
+  let cursor;
+  do {
+    const page = await env.KV.list({ prefix: 'prog:', cursor });
+    rows.push(...page.keys.map((k) => k.metadata).filter(Boolean));
+    cursor = page.list_complete ? null : page.cursor;
+  } while (cursor);
+  return rows;
+}
+
 const putSub = (env, id, sub) => env.KV.put(`sub:${id}`, JSON.stringify(sub), { metadata: { nextAt: sub.nextAt } });
 
 export async function handle(request, env) {
@@ -53,7 +75,12 @@ export async function handle(request, env) {
   const reply = (status, body = null, extra = {}) => new Response(body, { status, headers: { ...head, ...extra } });
   // After the show. A preflight above still passes, or the browser would never see this answer.
   if (env.CLOSED === '1' && url.pathname.startsWith('/f/')) return reply(410);
-  const known =/^\/f\/[A-Za-z0-9_-]{1,64}$/.test(url.pathname) || /^\/push\/(sub|next|off)$/.test(url.pathname);
+  if (url.pathname === '/staff' && request.method === 'GET') {
+    const right = !!env.STAFF_HASH && (await sha256(request.headers.get('x-staff-token') || '')) === env.STAFF_HASH;
+    if (!right) return reply((await withinLimit(request, env)) ? 401 : 429);
+    return reply(200, JSON.stringify(await staffRows(env)), { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  }
+  const known =/^\/f\/[A-Za-z0-9_-]{1,64}$/.test(url.pathname) || /^\/push\/(sub|next|off)$/.test(url.pathname) || url.pathname === '/progress';
   if (!known) return reply(404);
   const who = await authorised(request, env);
   if (!who.ok) return reply(who.status);
@@ -68,6 +95,12 @@ export async function handle(request, env) {
     body = await request.json();
   } catch {
     return reply(400);
+  }
+  if (url.pathname === '/progress') {
+    const row = progressRow(body, Date.now());
+    if (!row) return reply(400);
+    await env.KV.put(`prog:${row.id}`, '', { metadata: row });
+    return reply(204);
   }
   if (typeof body?.id !== 'string' || !/^[a-f0-9]{32}$/.test(body.id)) return reply(400);
   if (url.pathname === '/push/off') {

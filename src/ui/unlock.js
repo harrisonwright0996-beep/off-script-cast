@@ -61,6 +61,7 @@ export function showUnlock(ctx) {
       'Who are you?',
       [
         h('p', { class: 'lead' }, 'Pick your name to get your lines.'),
+        h('p', { class: 'help' }, SEEN),
         h('ul', { class: 'scene-list' }, cast.members.map((m) => h('li', {}, button(m.name, settled(() => confirm(keys, cast, m)))))),
       ],
       [],
@@ -120,6 +121,9 @@ export function showUnlock(ctx) {
   if (ctx.keys) carryOn();
   else codeScreen();
 }
+
+// What goes off the phone, said before a name is picked and in Settings.
+export const SEEN = 'Your director can see how much you have learnt and when you last practised.';
 
 // The pupil's own words, to tell a new script from a change to someone else's part or the audio.
 const wordsOf = (model) => JSON.stringify(model.items.map((it) => [it.id, it.text]));

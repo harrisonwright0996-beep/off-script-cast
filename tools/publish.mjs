@@ -5,7 +5,7 @@ import { cpSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const FILES = ['index.html', 'styles.css', 'sw.js', 'manifest.webmanifest', 'icons', 'src', 'vendor'];
+const FILES = ['index.html', 'staff.html', 'styles.css', 'sw.js', 'manifest.webmanifest', 'icons', 'src', 'vendor'];
 const out = mkdtempSync(join(tmpdir(), 'off-script-cast-'));
 try {
   for (const f of FILES) cpSync(f, join(out, f), { recursive: true });

@@ -5,6 +5,7 @@ import { VAPID_PUBLIC } from './config.js';
 import { post } from './client.js';
 import { isLearnt, learntPercent } from './proof.js';
 import { HOUR, TARGET, readyAt } from '../memory.js';
+import { report } from './progress.js';
 
 const MIN_GAP = 20 * HOUR;
 const MAX_GAP = 7 * 24 * HOUR;
@@ -83,6 +84,7 @@ export async function enable(ctx) {
 // After practice, and when the app opens: the next time, and fresh words. Waits for no one: offline,
 // the time already at the worker stands.
 export async function sync(ctx) {
+  report(ctx);
   try {
     const push = await ctx.store.get('push');
     if (!push) return;

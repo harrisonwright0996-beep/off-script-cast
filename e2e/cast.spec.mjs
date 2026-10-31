@@ -1,5 +1,5 @@
 // A pupil's whole journey, with the invented play and a stand in for the worker.
-import { test, expect, enrol, open, keysOf, fakeWorker, answerCard, CODE } from './helpers.mjs';
+import { test, expect, enrol, open, keysOf, fakeWorker, answerCard, CODE, STAFF } from './helpers.mjs';
 
 test('a wrong code is told so kindly, and nothing is unlocked', async ({ page }) => {
   await open(page);
@@ -338,4 +338,49 @@ test('typing is explained with the keypad; one wrong word on a long line passes,
   expect(await page.evaluate(() => window.offScript.getState(window.offScript.card.item.id).proved)).toBe(true);
   const seen = (await page.locator('main').innerText()).toLowerCase();
   expect(seen).not.toMatch(/one (word|miss)|allowed|8 words|eight words|still (pass|count)/);
+});
+
+test('the director sees numbers once a phone has signal, and names only with both codes', async ({ page, context }) => {
+  const progress = {};
+  await fakeWorker(page, { progress });
+  await enrol(page);
+  await expect(async () => expect(Object.keys(progress)).toHaveLength(0)).toPass();
+  await page.getByRole('button', { name: 'No, start from the beginning' }).click();
+  await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
+  await expect.poll(() => Object.values(progress).length).toBe(1);
+  const [row] = Object.values(progress);
+  expect(Object.keys(row).sort()).toEqual(['fading', 'id', 'lastDay', 'learnt', 'percent', 'total']);
+  expect(row.percent).toBe(0);
+
+  // No signal: nothing goes, and nothing is lost.
+  await page.evaluate(() => {
+    const o = window.offScript;
+    const it = o.model.items[0];
+    o.states.set(it.id, { ...o.getState(it.id), status: 'review', firstDay: o.today(), learnedDay: o.today(), passes: 3, helped: 1, stability: 200, passDays: [o.today()], lastResult: 'pass', lastDay: o.today(), lastTime: Date.now(), proved: true });
+  });
+  await context.setOffline(true);
+  await page.evaluate(() => window.offScript.go('settings'));
+  await page.evaluate(() => window.offScript.go('today'));
+  await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
+  expect(Object.values(progress)[0].learnt).toBe(0);
+  await context.setOffline(false);
+  await page.evaluate(() => window.offScript.go('settings'));
+  await page.evaluate(() => window.offScript.go('today'));
+  await expect.poll(() => Object.values(progress)[0].learnt).toBe(1);
+
+  await page.goto('staff.html');
+  await page.getByLabel('Company code').fill(CODE);
+  await page.getByLabel('Staff code').fill('wrong');
+  await page.getByRole('button', { name: 'Open' }).click();
+  await expect(page.getByRole('alert')).toHaveText('That staff code is not right.');
+  await page.getByLabel('Company code').fill(CODE);
+  await page.getByLabel('Staff code').fill(STAFF);
+  await page.getByRole('button', { name: 'Open' }).click();
+  await expect(page.getByText(/^1 of \d+ started\./)).toBeVisible({ timeout: 30000 });
+  await expect(page.locator('.staff-list li').filter({ hasText: 'Whole Company' })).toContainText('Practised today');
+  await expect(page.locator('.staff-list li').filter({ hasText: 'Not started' }).first()).toBeVisible();
+  await page.reload();
+  await expect(page.getByText(/^1 of \d+ started\./)).toBeVisible({ timeout: 30000 });
+  await page.getByRole('button', { name: 'Forget this phone' }).click();
+  await expect(page.getByLabel('Staff code')).toBeVisible();
 });

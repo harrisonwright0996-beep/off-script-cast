@@ -73,17 +73,25 @@ async function workerFiles() {
 // A stand in for the worker, inside the page. Playwright's WebKit cannot intercept a request from a
 // page with a service worker, and these tests want the service worker running as on a real phone.
 const faked = new WeakMap();
-export async function fakeWorker(page, { calls = [] } = {}) {
+export const STAFF = 'night-ferry-staff-code';
+
+export async function fakeWorker(page, { calls = [], progress = {} } = {}) {
   if (faked.has(page)) {
     faked.get(page).calls = calls;
     return;
   }
-  const seen = { calls };
+  const seen = { calls, progress };
   faked.set(page, seen);
   const { files, keys } = await workerFiles();
-  await page.exposeFunction('castWorker', (path, token) => {
+  await page.exposeFunction('castWorker', (path, headers, body) => {
     seen.calls.push(path);
-    if (token !== keys.token) return { status: 401 };
+    if (path === '/staff') return headers['x-staff-token'] === STAFF ? { status: 200, bytes: Buffer.from(JSON.stringify(Object.values(seen.progress))).toString('base64') } : { status: 401 };
+    if (headers['x-cast-token'] !== keys.token) return { status: 401 };
+    if (path === '/progress') {
+      const row = JSON.parse(body);
+      seen.progress[row.id] = row;
+      return { status: 204 };
+    }
     const file = files[path.replace('/f/', '')];
     return file ? { status: 200, bytes: Buffer.from(file).toString('base64') } : { status: 404 };
   });
@@ -92,7 +100,7 @@ export async function fakeWorker(page, { calls = [] } = {}) {
     window.fetch = async (url, options = {}) => {
       if (!String(url).startsWith(WORKER)) return real(url, options);
       if (!navigator.onLine) throw new TypeError('Load failed');
-      const { status, bytes } = await window.castWorker(String(url).slice(WORKER.length), options.headers['x-cast-token']);
+      const { status, bytes } = await window.castWorker(String(url).slice(WORKER.length), options.headers, options.body);
       return new Response(bytes ? Uint8Array.from(atob(bytes), (c) => c.charCodeAt(0)) : null, { status });
     };
   }, WORKER);

@@ -7,6 +7,7 @@ import { makeBackup, readBackup } from '../backup.js';
 import { withDefaults } from '../settings.js';
 import { dayKey, formatDay } from '../dates.js';
 import { canSpeak, voices, onVoicesChanged, speak } from '../tts.js';
+import { SEEN } from './unlock.js';
 
 const OPTIONS = {
   textSize: [90, 100, 115, 130, 150, 175, 200].map((n) => [n, `${n}%`]),
@@ -232,7 +233,7 @@ export function showSettings(ctx) {
             button('Not you? Remove everything', removeAll),
           ),
         ),
-        h('p', { class: 'help' }, 'Your lines and progress stay on this phone. If reminders are on, the only thing sent is the time of your next one.'),
+        h('p', { class: 'help' }, `Your lines stay on this phone. ${SEEN} If reminders are on, the time of your next one is sent too.`),
       ],
     }),
   );

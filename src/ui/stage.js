@@ -2,6 +2,7 @@
 // no time to spend, no streaks: only the % and what to do now.
 import { h, clear, screen, button, announce, focusHeading, settled } from './dom.js';
 import { crossed, fadingCount, learntPercent, sceneLights } from '../cast/proof.js';
+import { report } from '../cast/progress.js';
 import { sync } from '../cast/reminders.js';
 import { reminderOffer } from './offer.js';
 import { scienceNote } from '../cast/science.js';
@@ -99,6 +100,7 @@ export function showStage(ctx) {
     // Marked now it is on show, not before: only what was shown counts as seen.
     if (percent !== seen.percent || percent > best || lit) await ctx.store.set('seen', { ...seen, percent, best: Math.max(best, percent), lit: lit ? [...seen.lit, lit.scene] : seen.lit });
     if (moment) announce(moment);
+    report(ctx);
     if (!refreshed) {
       refreshed = true;
       if (ctx.keys) {

@@ -8,7 +8,7 @@ This is the company version of Off Script. A cast member adds it to their Home S
 
 * This repository holds code only: no script, no names, no audio and no company code. A privacy check runs before every push.
 * The packs are sealed on a laptop and held on a small worker. The worker cannot open them: it keeps only a hash of the token that the company code gives.
-* Progress stays on the phone. There is no staff view, no account and no analytics.
+* A phone sends the worker its latest numbers under its pack's coded name: % learnt, lines learnt and fading, and the day last practised. The director reads them at `/staff` with the company code and a staff code, and the names are matched on that phone. There are no accounts and no analytics.
 * A reminder is an empty push. The phone writes the words itself, so the worker never sees a message, a name or a line.
 
 ## Make and send the packs
@@ -36,6 +36,7 @@ node tools/set-worker.mjs --url https://off-script-cast.<name>.workers.dev --vap
 * `npm test` runs the unit tests.
 * `npx playwright test` runs the browser tests in WebKit and Chromium, on an invented play, with a local stand in for the worker.
 * `npm run serve` serves the app at http://localhost:4173/off-script-cast/
+* `node tools/staff-setup.mjs --out <private folder>` makes the staff code once and sets the worker's hash of it.
 * `npm run privacy` checks that no listed name, script or audio file is in the repository.
 * Change `VERSION` in `sw.js` with every release, so phones pick up the update.
 * `npm run publish:app` publishes the app to Cloudflare Pages, at https://off-script-cast.pages.dev/

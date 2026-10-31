@@ -266,3 +266,37 @@ test('setting the worker changes the address and the key, and nothing else', asy
   const before = "export const WORKER = 'https://off-script-cast.example.workers.dev';\nexport const VAPID_PUBLIC = '';\n";
   assert.equal(setWorker(before, 'https://off-script-cast.abc.workers.dev', 'KEY'), "export const WORKER = 'https://off-script-cast.abc.workers.dev';\nexport const VAPID_PUBLIC = 'KEY';\n");
 });
+
+const PROGRESS = { id: `p${'a'.repeat(32)}`, percent: 40, learnt: 8, total: 20, fading: 2, lastDay: '2026-11-03', name: 'never kept' };
+
+test('a phone reports its numbers with the company token, and nothing else is kept', async () => {
+  const e = await env();
+  assert.equal((await call(e, '/progress', { token: 'wrong', method: 'POST', body: PROGRESS })).status, 401);
+  for (const bad of [{ ...PROGRESS, percent: 101 }, { ...PROGRESS, id: 'pack' }, { ...PROGRESS, learnt: 21 }, { ...PROGRESS, lastDay: 'soon' }]) {
+    assert.equal((await call(e, '/progress', { method: 'POST', body: bad })).status, 400);
+  }
+  assert.equal((await call(e, '/progress', { method: 'POST', body: PROGRESS })).status, 204);
+  assert.equal((await call(e, '/progress', { method: 'POST', body: { ...PROGRESS, lastDay: null } })).status, 204);
+  const [{ metadata }] = (await e.KV.list({ prefix: 'prog:' })).keys;
+  assert.equal(metadata.percent, 40);
+  assert.equal(metadata.lastDay, null);
+  assert.equal('name' in metadata, false);
+});
+
+test('only the staff token reads the numbers, the company token cannot, and wrong tries are limited', async () => {
+  const e = await env();
+  e.STAFF_HASH = await tokenHash('staff');
+  await call(e, '/progress', { method: 'POST', body: PROGRESS });
+  const staff = (token) => handle(new Request('https://w.dev/staff', { headers: { 'x-staff-token': token, 'cf-connecting-ip': '2.2.2.2' } }), e);
+  assert.equal((await staff(TOKEN)).status, 401);
+  assert.equal((await handle(new Request('https://w.dev/staff', { headers: { 'x-cast-token': TOKEN } }), e)).status, 401);
+  const res = await staff('staff');
+  assert.equal(res.status, 200);
+  assert.deepEqual((await res.json()).map((r) => r.percent), [40]);
+  let last;
+  for (let i = 0; i < 12; i++) last = await staff('wrong');
+  assert.equal(last.status, 429);
+  delete e.STAFF_HASH;
+  e.LIMIT = fakeLimit();
+  assert.equal((await staff('')).status, 401, 'no secret set: nobody gets in');
+});

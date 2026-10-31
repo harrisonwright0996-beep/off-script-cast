@@ -7,7 +7,7 @@ import { unzipSync, strFromU8 } from '../../vendor/fflate.js';
 export class CastError extends Error {
   constructor(code) {
     super(code);
-    this.code = code; // 'wrong-code' | 'too-many' | 'offline' | 'damaged' | 'gone'
+    this.code = code; // 'wrong-code' | 'wrong-staff' | 'too-many' | 'offline' | 'damaged' | 'gone'
   }
 }
 
@@ -56,6 +56,20 @@ export async function fetchPack(keys, file) {
   } catch {
     throw new CastError('damaged');
   }
+}
+
+// Every pupil's numbers, for the director's page.
+export async function staffNumbers(code) {
+  let res;
+  try {
+    res = await fetch(`${WORKER}/staff`, { headers: { 'x-staff-token': code.trim() } });
+  } catch {
+    throw new CastError('offline');
+  }
+  if (res.status === 401) throw new CastError('wrong-staff');
+  if (res.status === 429) throw new CastError('too-many');
+  if (!res.ok) throw new CastError('offline');
+  return res.json();
 }
 
 export const post = (path, token, body) =>
