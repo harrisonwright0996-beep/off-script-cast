@@ -1,8 +1,8 @@
 // Offline: every app file is cached under one version name and served from the cache first.
-// A new version waits until Off Script asks for it (Update now on Today), so nothing reloads in the
-// middle of a sprint. A phone with no lines on it has nothing to interrupt, and no Update now to tap,
-// so it takes a new version at once. Change VERSION with every release.
-const VERSION = 'off-script-cast-15';
+// A new version takes over as soon as it is here. That does not disturb a round or a walk: an open page
+// keeps what it has loaded, and starts again by itself at the next Your lines. A page with no lines
+// has nothing to interrupt, so it is sent to the new version at once. Change VERSION with every release.
+const VERSION = 'off-script-cast-16';
 const FILES = [
   './',
   'styles.css',
@@ -65,7 +65,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
       await (await caches.open(VERSION)).addAll(FILES);
-      if (!(await hasLines())) await self.skipWaiting();
+      await self.skipWaiting();
     })(),
   );
 });
@@ -82,10 +82,6 @@ self.addEventListener('activate', (event) => {
       }
     })(),
   );
-});
-
-self.addEventListener('message', (event) => {
-  if (event.data === 'skip-waiting') self.skipWaiting();
 });
 
 self.addEventListener('fetch', (event) => {

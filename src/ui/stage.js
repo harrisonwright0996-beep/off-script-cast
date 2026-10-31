@@ -74,12 +74,15 @@ export function showStage(ctx) {
   let dipped = false; // these stay said for as long as this screen is up
   let updated = false;
   let asking = false;
+  let refreshing = false; // new lines may be going in: a restart now could lose some of the audio
 
   const nav = ctx.nav;
 
   async function render() {
     if (ctx.nav !== nav) return;
     if (asking) return; // what they are typing stays
+    // A new version starts here, before anything is drawn or marked as seen. Never in a round or a walk.
+    if (ctx.update && !refreshing) return location.reload();
     if (ctx.member && !(await ctx.store.get('myName'))) {
       asking = true;
       return askName(ctx, () => {
@@ -111,7 +114,6 @@ export function showStage(ctx) {
     const started = [...ctx.states.values()].some((s) => s.status !== 'new');
     const body = [];
 
-    if (ctx.update) body.push(h('div', { class: 'notice' }, h('p', {}, 'A new version is ready.'), button('Update now', () => ctx.applyUpdate(), { class: 'btn' })));
     if (updated) body.push(h('p', { class: 'message', role: 'status' }, 'Your lines have been updated.'));
     if (ctx.memberGone) body.push(h('p', { class: 'message' }, 'These lines are no longer on the cast list. Ask your director.'));
     if (ctx.member) body.push(h('p', { class: 'who' }, `Learning as ${ctx.member.name}`));
@@ -160,8 +162,10 @@ export function showStage(ctx) {
     if (!refreshed) {
       refreshed = true;
       if (ctx.keys) {
+        refreshing = true;
         refreshPack(ctx, () => ctx.nav === nav).then((changed) => {
-          if (changed && ctx.nav === nav) redraw();
+          refreshing = false;
+          if ((changed || ctx.update) && ctx.nav === nav) redraw();
           if (ctx.model) sync(ctx);
         });
       }

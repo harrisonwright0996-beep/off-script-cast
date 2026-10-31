@@ -567,17 +567,10 @@ test('every line learnt: one Run through, and one word about keeping them', asyn
   await expect(page.locator('.moment')).toHaveCount(0);
 });
 
-test('the update notice and Not now leave the focus on the page', async ({ page }, info) => {
+test('Not now leaves the focus on the page', async ({ page }, info) => {
   await enrol(page);
   await page.getByRole('button', { name: 'No, start from the beginning' }).click();
   await expect(page.getByRole('heading', { name: 'Your lines' })).toBeVisible();
-  await page.evaluate(() => {
-    window.offScript.update = {};
-    document.dispatchEvent(new CustomEvent('offscript:update'));
-  });
-  await expect(page.getByText('A new version is ready.')).toBeVisible();
-  await expect.poll(() => focused(page)).toBe('H1');
-  await page.evaluate(() => (window.offScript.update = null));
 
   test.skip(!(await page.evaluate(() => 'PushManager' in window && 'Notification' in window)), 'no reminders in this browser');
   await page.evaluate(() => {

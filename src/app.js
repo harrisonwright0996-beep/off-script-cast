@@ -60,7 +60,7 @@ async function boot() {
     manifest: (await store.get('manifest')) || null,
     keys: (await store.get('keys')) || null,
     member: (await store.get('member')) || null,
-    update: null, // a waiting service worker, when a new version is ready
+    update: false, // a new version has taken over: it shows at the next Your lines
     cleanup: null,
     nav: 0,
     fit: { k: 1, n: 0 }, // his forgetting curve factor, refitted when a sprint or walk starts
@@ -160,11 +160,6 @@ async function boot() {
       focusHeading(ctx.root);
     },
 
-    applyUpdate() {
-      if (!ctx.update) return;
-      navigator.serviceWorker.addEventListener('controllerchange', () => location.reload());
-      ctx.update.postMessage('skip-waiting');
-    },
   };
   window.offScript = ctx; // handy when testing; holds nothing that leaves the phone
 
@@ -185,20 +180,18 @@ async function boot() {
 
 function registerServiceWorker(ctx) {
   if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
+  // The first to take charge of a page is not an update, only what comes after it.
+  let charged = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (charged) {
+      ctx.update = true;
+      document.dispatchEvent(new CustomEvent('offscript:update'));
+    }
+    charged = true;
+  });
   navigator.serviceWorker
     .register('./sw.js')
     .then((reg) => {
-      const check = () => {
-        if (reg.waiting && navigator.serviceWorker.controller) {
-          ctx.update = reg.waiting;
-          document.dispatchEvent(new CustomEvent('offscript:update'));
-        }
-      };
-      check();
-      reg.addEventListener('updatefound', () => {
-        const w = reg.installing;
-        if (w) w.addEventListener('statechange', () => w.state === 'installed' && check());
-      });
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') reg.update().catch(() => {});
       });
