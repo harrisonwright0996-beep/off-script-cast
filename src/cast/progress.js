@@ -43,7 +43,7 @@ export async function report(ctx) {
     if (!ctx.keys || !ctx.member?.file || !name) return;
     let id = await ctx.store.get(ROW);
     if (!id) await ctx.store.set(ROW, (id = randomId()));
-    const row = { id, ...progressOf(ctx) };
+    const row = { id, ...progressOf(ctx), reminders: !!(await ctx.store.get('push')) };
     const said = JSON.stringify({ ...row, name });
     if (said === (await ctx.store.get('reported'))) return;
     const scenes = await sealText(ctx.keys.key, row.scenes);

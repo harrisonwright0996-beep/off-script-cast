@@ -131,7 +131,11 @@ export async function enrol(page, name = 'Whole Company', url = './', who = 'Tes
   await page.getByRole('button', { name: 'Yes, these are my lines' }).click();
   await page.getByLabel('Your name').fill(who);
   await page.getByRole('button', { name: 'Carry on' }).click();
-  await expect(page.getByRole('heading', { name: 'Already know some?' })).toBeVisible({ timeout: 30000 });
+  const known = page.getByRole('heading', { name: 'Already know some?' });
+  const notNow = page.getByRole('button', { name: 'Not now' }); // a browser with push is asked about reminders
+  await expect(known.or(notNow)).toBeVisible({ timeout: 30000 });
+  if (await notNow.isVisible()) await notNow.click();
+  await expect(known).toBeVisible();
 }
 
 // For the tests of the engine: the whole play on the settings they were written for.

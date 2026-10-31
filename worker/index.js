@@ -68,6 +68,7 @@ function progressRow(b, now) {
   if (b.onWay !== undefined) row.onWay = b.onWay;
   if (b.scenes !== undefined) row.scenes = b.scenes;
   if (Number.isInteger(b.streak) && b.streak >= 0 && b.streak <= 5000) row.streak = b.streak;
+  if (typeof b.reminders === 'boolean') row.reminders = b.reminders;
   return row;
 }
 

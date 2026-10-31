@@ -3,6 +3,7 @@ import { h, clear, screen, button, focusHeading, plural, settled } from './dom.j
 import { CastError, fetchPack, openCast, unlock } from '../cast/client.js';
 import { cleanCode } from '../cast/pack.js';
 import { askToPersist } from '../store.js';
+import { needsPrompt, reminderPrompt } from './offer.js';
 
 const PROBLEMS = {
   'wrong-code': 'That code is not right. Check it and try again.',
@@ -12,6 +13,7 @@ const PROBLEMS = {
   space: 'Your phone is short of space. Free some up, then try again.',
   gone: 'The show is over, so these lines are no longer here. Well done.',
 };
+const REMIND = 'Want a nudge when your lines start to fade? Once you know them you will forget them unless you keep going, so a reminder really helps.';
 const NOT_FOUR = 'That is not quite it: the code is four words.';
 const TROUBLE_AFTER = 20000;
 const inTime = (work) => Promise.race([work, new Promise((_, reject) => setTimeout(() => reject(new CastError('offline')), TROUBLE_AFTER))]);
@@ -101,7 +103,9 @@ export function showUnlock(ctx) {
       ctx.manifest = manifest;
       await ctx.setModel(model, { importedAt: Date.now() });
       await askToPersist();
-      ctx.go('checkin', { intro: true });
+      const onward = () => ctx.go('checkin', { intro: true });
+      if (await needsPrompt(ctx)) reminderPrompt(ctx, { title: 'Reminders', words: REMIND, then: onward });
+      else onward();
     } catch (err) {
       if (mine !== tries || landed) return; // a slower try got there: they have moved on
       const code = err instanceof CastError ? err.code : err && err.name === 'QuotaExceededError' ? 'space' : 'damaged';
@@ -126,7 +130,7 @@ export function showUnlock(ctx) {
 }
 
 // What goes off the phone, said before a name is picked and in Settings.
-export const SEEN = 'Your director can see your name, whose lines you are learning, how much you have learnt in each scene, how many lines are fading, your streak and when you last practised.';
+export const SEEN = 'Your director can see your name, whose lines you are learning, how much you have learnt in each scene, how many lines are fading, your streak, whether reminders are on and when you last practised.';
 
 // The pupil's own name, typed: an understudy picks the part they are learning, so the part alone does
 // not say who this is. Sealed before it leaves the phone. Asked once, and of a phone that has none yet.

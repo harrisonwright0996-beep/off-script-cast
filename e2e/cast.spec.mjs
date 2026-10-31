@@ -383,7 +383,7 @@ test('the director sees numbers once a phone has signal, and names only with bot
   await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
   await expect.poll(() => Object.values(progress).length).toBe(1);
   const [row] = Object.values(progress);
-  expect(Object.keys(row).sort()).toEqual(['fading', 'id', 'lastDay', 'learnt', 'onWay', 'pack', 'percent', 'scenes', 'streak', 'total', 'who']);
+  expect(Object.keys(row).sort()).toEqual(['fading', 'id', 'lastDay', 'learnt', 'onWay', 'pack', 'percent', 'reminders', 'scenes', 'streak', 'total', 'who']);
   expect(JSON.stringify(row)).not.toContain('Test Pupil');
   expect(JSON.stringify(row)).not.toContain('Prologue'); // the scenes go sealed too
   expect(row.percent).toBe(0);
@@ -463,6 +463,87 @@ test('a phone that unlocked before names were asked for is asked once, and an em
   expect(await page.evaluate(() => window.offScript.store.get('myName'))).toBe('Alex Reed');
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
+});
+
+test.describe('the prompt for reminders', () => {
+  const withPush = (page, permission = 'default') =>
+    page.addInitScript((permission) => {
+      window.PushManager ||= function () {};
+      window.PushManager.prototype.getSubscription = async () => ({ endpoint: 'y' });
+      window.Notification = Object.assign(function () {}, { permission, requestPermission: async () => 'denied' });
+    }, permission);
+
+  test('a new pupil is asked straight after their lines arrive, and Not now leaves the offer after a round', async ({ page }) => {
+    await withPush(page);
+    await open(page);
+    await page.getByLabel('Company code').fill(CODE);
+    await page.getByRole('button', { name: 'Unlock' }).click();
+    await page.getByRole('button', { name: 'Whole Company', exact: true }).click();
+    await page.getByRole('button', { name: 'Yes, these are my lines' }).click();
+    await page.getByLabel('Your name').fill('Test Pupil');
+    await page.getByRole('button', { name: 'Carry on' }).click();
+    await expect(page.getByRole('heading', { name: 'Reminders', exact: true })).toBeVisible({ timeout: 30000 });
+    await page.getByRole('button', { name: 'Not now' }).click();
+    await expect(page.getByRole('heading', { name: 'Already know some?' })).toBeVisible();
+    await page.getByRole('button', { name: 'No, start from the beginning' }).click();
+    await expect(page.getByRole('heading', { name: 'Your lines' })).toBeVisible();
+    expect(await page.evaluate(() => window.offScript.store.get('pushAsked'))).toBeFalsy();
+  });
+
+  test('a phone that already has the app is asked once when it opens, whatever it said before', async ({ page }) => {
+    await enrol(page);
+    await page.getByRole('button', { name: 'No, start from the beginning' }).click();
+    await page.evaluate(async () => {
+      await window.offScript.store.set('pushAsked', true); // said Not now, on the older version
+      await window.offScript.store.del('pushPrompted');
+    });
+    await withPush(page);
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Don’t lose your streak' })).toBeVisible();
+    await expect(page.getByText('Enable reminders to help you keep your lines fresh and ready.')).toBeVisible();
+    await page.getByRole('button', { name: 'Not now' }).click();
+    await expect(page.getByRole('heading', { name: 'Your lines' })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Your lines' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Don’t lose your streak' })).toHaveCount(0);
+  });
+
+  test('a yes that the phone refuses says so, and carries on', async ({ page }) => {
+    await enrol(page);
+    await page.getByRole('button', { name: 'No, start from the beginning' }).click();
+    await page.evaluate(() => window.offScript.store.del('pushPrompted'));
+    await withPush(page);
+    await page.reload();
+    await page.getByRole('button', { name: 'Yes, remind me' }).click();
+    await expect(page.getByText('Reminders did not switch on.')).toBeVisible();
+    await page.getByRole('button', { name: 'Carry on' }).click();
+    await expect(page.getByRole('heading', { name: 'Your lines' })).toBeVisible();
+  });
+
+  test('a phone with reminders on is not asked', async ({ page }) => {
+    await enrol(page);
+    await page.getByRole('button', { name: 'No, start from the beginning' }).click();
+    await page.evaluate(() => window.offScript.store.set('pushPrompted', true));
+    await withPush(page, 'granted');
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Your lines' })).toBeVisible();
+    await page.evaluate(async () => {
+      await window.offScript.store.del('pushPrompted');
+      await window.offScript.store.set('push', { id: 'x', endpoint: 'y' });
+    });
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Your lines' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Yes, remind me' })).toHaveCount(0);
+  });
+
+  test('a phone that has refused notifications is not asked: its answer could not change', async ({ page }) => {
+    await enrol(page);
+    await page.getByRole('button', { name: 'No, start from the beginning' }).click();
+    await page.evaluate(() => window.offScript.store.del('pushPrompted'));
+    await withPush(page, 'denied');
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Your lines' })).toBeVisible();
+  });
 });
 
 test.describe('streaks and badges', () => {

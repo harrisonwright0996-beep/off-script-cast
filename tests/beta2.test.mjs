@@ -189,11 +189,12 @@ test('after the show nothing is sent and what is left goes', async () => {
 
 test('the worker keeps a streak of the right kind, and a row from an older phone needs none', async () => {
   const e = await worker();
-  assert.equal((await send(e, '/progress', { ...ROW, streak: 5 })).status, 204);
+  assert.equal((await send(e, '/progress', { ...ROW, streak: 5, reminders: true })).status, 204);
   assert.match(JSON.stringify([...e.KV.m.entries()]), /streak.{0,4}5/);
+  assert.match(JSON.stringify([...e.KV.m.entries()]), /reminders.{0,4}true/);
   assert.equal((await send(e, '/progress/off', { id: ROW.id })).status, 204);
-  assert.equal((await send(e, '/progress', { ...ROW, id: 'e'.repeat(32), streak: 'lots' })).status, 204);
-  assert.doesNotMatch(JSON.stringify([...e.KV.m.entries()]), /streak/);
+  assert.equal((await send(e, '/progress', { ...ROW, id: 'e'.repeat(32), streak: 'lots', reminders: 'yes' })).status, 204);
+  assert.doesNotMatch(JSON.stringify([...e.KV.m.entries()]), /streak|reminders/);
 });
 
 test('with lines still to learn, the next reminder comes later the same day, and never late at night', () => {

@@ -5,7 +5,7 @@ import { rewardCard, streakBlock } from './badges.js';
 import { crossed, fadingCount, learntPercent, sceneLights } from '../cast/proof.js';
 import { report } from '../cast/progress.js';
 import { sync } from '../cast/reminders.js';
-import { reminderOffer } from './offer.js';
+import { needsPrompt, reminderOffer, reminderPrompt } from './offer.js';
 import { scienceNote } from '../cast/science.js';
 import { applyWaitingPack, askName, refreshPack } from './unlock.js';
 import { ENDS } from '../cast/config.js';
@@ -85,6 +85,17 @@ export function showStage(ctx) {
       return askName(ctx, () => {
         asking = false;
         render();
+      });
+    }
+    if (ctx.member && (await needsPrompt(ctx))) {
+      asking = true;
+      return reminderPrompt(ctx, {
+        title: 'Don’t lose your streak',
+        words: 'Enable reminders to help you keep your lines fresh and ready.',
+        then: () => {
+          asking = false;
+          render();
+        },
       });
     }
     await applyWaitingPack(ctx).catch(() => {});
