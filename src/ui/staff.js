@@ -8,6 +8,8 @@ import { dayKey } from '../dates.js';
 const SAVED = 'castStaff';
 const DAY = 86400000;
 const QUIET = 7; // days with no practice before a pupil needs a word
+const CHASE = 2; // days with no practice before they are worth a mention
+const FADING = 5; // lines going before they are worth a mention
 const root = typeof document === 'undefined' ? null : document.getElementById('app');
 
 // The codes last for this visit, in case the phone is shared. Kept for good only if asked.
@@ -75,6 +77,33 @@ export function staffRows(members, rows, today = dayKey(new Date())) {
   return [...nobody, ...people].sort((a, b) => rank(a) - rank(b) || (a.percent ?? -1) - (b.percent ?? -1) || a.name.localeCompare(b.name));
 }
 
+// 1=40|2=100|Prologue=0, as a phone sealed it (progress.js).
+export const sceneList = (text) =>
+  !text ? [] : text.split('|').map((s) => s.split('=')).map(([label, pc]) => ({ label: /^\d+$/.test(label) ? `Scene ${label}` : label, percent: Number(pc) }));
+
+// Who to talk to first, and why, in the order it matters. Parts with no one on them go in one line.
+export function chaseList(rows, today = dayKey(new Date())) {
+  const waiting = rows.filter((r) => r.percent === undefined).map((r) => r.name);
+  const chase = rows.filter((r) => r.percent !== undefined).flatMap((r) => {
+    const gone = r.lastDay ? daysSince(r.lastDay, today) : null;
+    if (gone === null) return [{ name: r.name, why: 'Opened the app, no practice yet.' }];
+    if (gone >= CHASE) return [{ name: r.name, why: `No practice for ${gone} days.` }];
+    return r.fading >= FADING ? [{ name: r.name, why: `${r.fading} lines fading.` }] : [];
+  });
+  return { waiting, chase };
+}
+
+// Each scene across everyone working on it, in the order of the first pupil who has it.
+export function sceneAverages(rows) {
+  const scenes = new Map();
+  for (const r of rows) {
+    for (const { label, percent } of sceneList(r.scenes)) scenes.set(label, [...(scenes.get(label) || []), percent]);
+  }
+  return [...scenes].map(([label, all]) => ({ label, percent: Math.floor(all.reduce((a, b) => a + b, 0) / all.length), pupils: all.length }));
+}
+
+const barOf = (percent) => h('div', { class: 'timebar', role: 'img', 'aria-label': `${percent}% learnt` }, h('div', { class: 'timebar-fill', style: { width: `${percent}%` } }));
+
 function rowView(r, codes) {
   const left = !r.part ? 'No longer on the cast list. ' : sameFirstName(r.name, r.part) ? '' : `On ${r.part}'s lines. `;
   const onWay = r.onWay ? `, ${r.onWay} more on the way` : '';
@@ -104,7 +133,10 @@ function rowView(r, codes) {
     h('p', { class: 'staff-name' }, h('strong', {}, r.name), h('span', {}, r.percent === undefined ? '' : `${r.percent}%`)),
     isQuiet(r) ? h('p', { class: 'needs-word' }, 'Needs a word') : null,
     h('p', { class: 'help' }, said),
-    h('div', { class: 'timebar', role: 'img', 'aria-label': `${r.percent ?? 0}% learnt` }, h('div', { class: 'timebar-fill', style: { width: `${r.percent ?? 0}%` } })),
+    barOf(r.percent ?? 0),
+    r.scenes
+      ? h('details', { class: 'scene-pcs' }, h('summary', {}, 'Scene by scene'), h('ul', {}, sceneList(r.scenes).map((s) => h('li', {}, h('span', {}, s.label), h('span', {}, `${s.percent}%`)))))
+      : null,
     remove,
   );
 }
@@ -140,7 +172,13 @@ async function load(codes, shown = null, keep = keeping()) {
     const rows = await staffNumbers(codes.staff);
     const keys = await deriveKeys(cleanCode(codes.company));
     const cast = await openCast(keys);
-    const named = await Promise.all(rows.map(async (r) => ({ ...r, who: await openText(keys.key, r.who).catch(() => undefined) })));
+    const named = await Promise.all(
+      rows.map(async (r) => ({
+        ...r,
+        who: await openText(keys.key, r.who).catch(() => undefined),
+        scenes: r.scenes ? await openText(keys.key, r.scenes).catch(() => undefined) : undefined,
+      })),
+    );
     remember(codes, keep);
     show(codes, staffRows(cast.members, named));
   } catch (err) {
@@ -155,9 +193,19 @@ function show(codes, rows, problem = null) {
   const parts = rows.length - started;
   const average = Math.floor(rows.reduce((n, r) => n + (r.percent ?? 0), 0) / (rows.length || 1));
   const quiet = rows.filter((r) => isQuiet(r)).length;
+  const { waiting, chase } = chaseList(rows);
+  const averages = sceneAverages(rows);
   page('Cast progress', [
     problem ? h('p', { class: 'message', role: 'alert' }, problem) : null,
     h('p', { class: 'lead', role: 'status' }, `${started} started, ${plural(parts, 'part')} not started. ${average}% on average.${quiet ? ` ${quiet} ${quiet === 1 ? 'needs' : 'need'} a word.` : ''}`),
+    h('h2', {}, 'Chase first'),
+    chase.length ? h('ul', { class: 'chase-list' }, chase.map((c) => h('li', {}, h('strong', {}, c.name), ` ${c.why}`))) : h('p', {}, 'No one who has started needs chasing.'),
+    waiting.length ? h('p', {}, h('strong', {}, 'Not started yet: '), waiting.join(', '), '.') : null,
+    averages.length ? h('h2', {}, 'Scenes') : null,
+    averages.length
+      ? h('ul', { class: 'scene-averages' }, averages.map((s) => h('li', {}, h('p', { class: 'staff-name' }, h('strong', {}, s.label), h('span', {}, `${s.percent}%`)), barOf(s.percent))))
+      : null,
+    h('h2', {}, 'Everyone'),
     h('ul', { class: 'staff-list' }, rows.map((r) => rowView(r, codes))),
     h('p', { class: 'help' }, 'A line counts once a pupil can still type it on a later day. A phone updates this when it next has signal, so a pupil offline may be further on than this shows.'),
     h('div', { class: 'stack' }, button('Refresh', () => load(codes, rows), { class: 'btn primary' }), h('p', { class: 'help' }, "Pupils' progress stays safe."), button('Remove my codes from this phone', () => (remember(null), codesScreen()))),

@@ -1,7 +1,7 @@
 // First open: the right install steps for this device. On iPhone the installed app keeps its own
 // storage, so a phone installs first and unlocks afterwards. Reminders need the installed app too.
 import { h, screen, button, announce } from './dom.js';
-import { thisDevice, mustInstall } from '../device.js';
+import { thisDevice, mustInstall, safariHasDots } from '../device.js';
 
 const BROWSER_FLAG = 'off-script-cast-in-browser';
 
@@ -28,13 +28,13 @@ function inBrowserChosen() {
 // install for, whichever way it was opened.
 export const needsInstall = (hasLines = false) => mustInstall(thisDevice()) && !inBrowserChosen() && !(hasLines && thisDevice().startsWith('android'));
 
-const SAFARI = [
-  'Tap the three dots next to the address bar. No three dots? Skip this: the Share button is at the bottom of the screen, or the top on an iPad.',
+const SHARE_STEPS = [
   'Tap Share (the square with an arrow pointing up).',
   'Scroll down and tap Add to Home Screen. You may need to tap View More first.',
   'If you see Open as Web App, leave it on. Tap Add.',
   'Close Safari and open Off Script from your Home Screen.',
 ];
+const SAFARI = ['Tap the three dots next to the address bar.', ...SHARE_STEPS];
 const CHROME_ANDROID = [
   'Tap the three dots at the top right of Chrome.',
   'Tap Add to Home screen or Install app.',
@@ -61,6 +61,88 @@ const STEPS = {
 };
 
 const list = (steps) => h('ol', { class: 'steps' }, steps.map((s) => h('li', {}, s)));
+
+// The drawings: one for each step, a phone's screen with a pulsing ring where the finger goes. Drawn
+// here, not photographed, so they are small and work with no signal. The steps beside them say it all
+// in words, so a screen reader is not sent through them.
+const tap = () => h('span', { class: 'demo-tap' });
+const bar = (...kids) => h('div', { class: 'demo-bar' }, ...kids);
+const address = () => h('span', { class: 'demo-address' }, 'off-script-cast.pages.dev');
+const icon = () => h('img', { class: 'demo-icon', src: 'icons/icon-192.png', alt: '' });
+const row = (text, on = false) => h('div', { class: 'demo-row' }, h('span', {}, text), on ? tap() : null);
+const sheet = (...kids) => h('div', { class: 'demo-sheet' }, ...kids);
+const homeScreen = () =>
+  h('div', { class: 'demo-home' }, ['', '', '', ''].map(() => h('span', { class: 'demo-app' })), h('div', { class: 'demo-mine' }, icon(), h('span', {}, 'Off Script'), tap()));
+const addSheet = (word) =>
+  sheet(
+    h('div', { class: 'demo-sheet-top' }, h('span', {}, 'Cancel'), h('strong', {}, word), h('span', { class: 'demo-add' }, 'Add', tap())),
+    h('div', { class: 'demo-row' }, icon(), h('span', {}, 'Off Script')),
+  );
+
+const SAFARI_SHARE = () => sheet(row('Copy'), row('Add to Favourites'), row('Add to Home Screen', true));
+const SAFARI_ADD = () => addSheet('Add to Home Screen');
+const DOTS_FRAMES = [
+  () => [bar(address(), h('span', { class: 'demo-dots' }, '•••', tap()))],
+  () => [sheet(row('Share', true), row('Add to Bookmarks'), row('Find on Page')), bar(address(), h('span', { class: 'demo-dots' }, '•••'))],
+  SAFARI_SHARE,
+  SAFARI_ADD,
+  homeScreen,
+];
+const SHARE_FRAMES = [() => [bar(h('span', { class: 'demo-share' }, '↑', tap())), h('p', { class: 'demo-url' }, 'off-script-cast.pages.dev')], SAFARI_SHARE, SAFARI_ADD, homeScreen];
+const CHROME_FRAMES = [
+  () => [h('div', { class: 'demo-bar demo-top' }, address(), h('span', { class: 'demo-dots' }, '⋮', tap()))],
+  () => [sheet(row('New tab'), row('Bookmarks'), row('Add to Home screen', true))],
+  () => [addSheet('Install app')],
+  homeScreen,
+];
+
+const WAIT = 3500; // long enough to read a step
+const stillMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Plays the steps round, with the step in words lit beside the drawing. It stops for good at a tap, so
+// no one has to read against the clock, and never starts by itself for a phone set to reduce motion.
+function demo(steps, frames) {
+  const items = steps.map((s) => h('li', {}, s));
+  const shown = h('div', { class: 'demo-screen', 'aria-hidden': 'true' });
+  const count = h('span', { class: 'demo-count' });
+  let at = 0;
+  let timer = null;
+  const draw = () => {
+    shown.replaceChildren(...[frames[at]()].flat());
+    items.forEach((li, i) => li.classList.toggle('on', i === at));
+    count.textContent = `Step ${at + 1} of ${steps.length}`;
+  };
+  const stop = () => {
+    clearInterval(timer);
+    timer = null;
+    pause.textContent = 'Play';
+  };
+  const play = () => {
+    timer = setInterval(() => {
+      if (!shown.isConnected) return clearInterval(timer); // this screen has gone
+      at = (at + 1) % steps.length;
+      draw();
+    }, WAIT);
+    pause.textContent = 'Pause';
+  };
+  const move = (by) => () => {
+    stop();
+    at = (at + by + steps.length) % steps.length;
+    draw();
+  };
+  const pause = button('Pause', () => (timer ? stop() : play()));
+  draw();
+  if (stillMotion()) pause.textContent = 'Play';
+  else play();
+  return [h('div', { class: 'demo' }, shown, h('div', { class: 'demo-controls' }, button('Back', move(-1)), count, button('Next', move(1)), pause)), h('ol', { class: 'steps demo-steps' }, items)];
+}
+
+// A phone with a drawing gets the steps played out; any other gets them as a list.
+function shownSteps(kind, info) {
+  if (kind === 'android-chrome') return demo(info.steps, CHROME_FRAMES);
+  if (kind !== 'ios-safari') return [list(info.steps)];
+  return safariHasDots(navigator.userAgent) ? demo(SAFARI, DOTS_FRAMES) : demo(SHARE_STEPS, SHARE_FRAMES);
+}
 
 export function showInstall(ctx) {
   const kind = thisDevice();
@@ -113,7 +195,7 @@ export function showInstall(ctx) {
   ctx.root.append(
     screen({
       title: 'Install Off Script',
-      body: [h('p', { class: 'lead' }, info.lead), list(info.steps), kind === 'ios-safari' ? h('p', { class: 'help' }, 'Already added it? Open Off Script from your Home Screen.') : null, info.copy ? button('Copy link', copy, { class: 'btn' }) : null, said, others, all],
+      body: [h('p', { class: 'lead' }, info.lead), ...shownSteps(kind, info), kind === 'ios-safari' ? h('p', { class: 'help' }, 'Looks different? Share is the square with an arrow, at the bottom of the screen, or the top on an iPad. Already added it? Open Off Script from your Home Screen.') : null, info.copy ? button('Copy link', copy, { class: 'btn' }) : null, said, others, all],
       footer: [install, kind.startsWith('ios') || kind === 'in-app' ? h('p', { class: 'help' }, 'If you carry on here and install later, you will start again.') : null, button('Carry on without installing', carryOn, { class: 'btn link' })].filter(Boolean),
     }),
   );

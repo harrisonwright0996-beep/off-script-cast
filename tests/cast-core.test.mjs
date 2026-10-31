@@ -277,7 +277,7 @@ test('the words fit why the nudge comes: new lines with nothing fading never say
   const app = fakeApp();
   const args = () => ({ model: app.model, getState: app.getState, now });
   assert.equal(nudgeWhy(args()), 'new'); // nothing learnt yet, so nothing can fade
-  for (const turn of [0, 1, 2, 3]) assert.equal(nudgeText({ percent: 0, turn, why: 'new' }).body, 'Your lines are ready when you are. Fancy a quick round?');
+  for (const turn of [0, 1, 2, 3]) assert.doesNotMatch(nudgeText({ percent: 0, turn, why: 'new' }).body, /fad|slip/i);
   learn(app, app.model.items.map((it) => it.id), { proved: true });
   assert.equal(nudgeWhy(args()), 'fading'); // every line learnt: only fading is left to bring them back
   assert.match(nudgeText({ percent: 100, turn: 0, why: 'fading' }).body, /keeps them fresh/);

@@ -1,5 +1,5 @@
 // A pupil's whole journey, with the invented play and a stand in for the worker.
-import { test, expect, enrol, open, keysOf, fakeWorker, answerCard, CODE, STAFF } from './helpers.mjs';
+import { test, expect, enrol, open, keysOf, fakeWorker, answerCard, CODE, STAFF, more } from './helpers.mjs';
 
 test('a wrong code is told so kindly, and nothing is unlocked', async ({ page }) => {
   await open(page);
@@ -78,7 +78,7 @@ test('already know some: one try a line, for good, even a line left part way or 
   await page.keyboard.press('?'); // a look at the second, then away
   await page.getByRole('button', { name: 'That is enough, teach me' }).click();
   await page.getByRole('button', { name: 'Start learning' }).click();
-  await page.getByRole('button', { name: 'My lines' }).click();
+  await more(page, 'Read my lines');
   await page.getByRole('button', { name: 'Already know some? Check them' }).click();
   await page.getByRole('button', { name: 'Yes, check what I know' }).click();
   await expect(page.locator('.where')).toHaveText('Checking your lines: 1 of 21');
@@ -199,7 +199,7 @@ test('a walk says what to do now, in words, and the tape has the coach in it', a
 test('code again after removing everything: the phone is clean', async ({ page }) => {
   await enrol(page);
   await page.getByRole('button', { name: 'No, start from the beginning' }).click();
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await more(page, 'Settings');
   await page.getByRole('button', { name: 'Remove everything from this phone' }).click();
   await page.getByRole('button', { name: 'Remove everything' }).click();
   await expect(page.getByLabel('Company code').or(page.getByRole('button', { name: 'Carry on without installing' }))).toBeVisible();
@@ -210,7 +210,16 @@ test('the install screen fits the device', async ({ page }, info) => {
   await page.goto('./');
   if (info.project.name === 'webkit') {
     await expect(page.getByRole('heading', { name: 'Install Off Script' })).toBeVisible();
-    await expect(page.getByText('Add to Home Screen', { exact: false }).first()).toBeVisible();
+    await expect(page.locator('.demo-steps li.on')).toBeVisible();
+    await expect(page.locator('.demo-count')).toHaveText(/^Step 2 of/, { timeout: 5000 }); // it plays by itself
+    await page.getByRole('button', { name: 'Next' }).click(); // and a tap stops it
+    await expect(page.locator('.demo-count')).toHaveText(/^Step 3 of/);
+    await page.waitForTimeout(4000);
+    await expect(page.locator('.demo-count')).toHaveText(/^Step 3 of/);
+    for (let i = 0; i < 5; i++) {
+      await page.locator('.screen').screenshot({ path: `shots/${info.project.name}-install-${i}.png` });
+      await page.getByRole('button', { name: 'Next' }).click();
+    }
     await page.getByRole('button', { name: 'Not your device? See all the steps' }).click();
     await expect(page.getByRole('heading', { name: 'Android', exact: true })).toBeVisible();
     await page.screenshot({ path: `shots/${info.project.name}-install.png`, fullPage: true });
@@ -355,8 +364,9 @@ test('the director sees numbers once a phone has signal, and names only with bot
   await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
   await expect.poll(() => Object.values(progress).length).toBe(1);
   const [row] = Object.values(progress);
-  expect(Object.keys(row).sort()).toEqual(['fading', 'id', 'lastDay', 'learnt', 'onWay', 'pack', 'percent', 'total', 'who']);
+  expect(Object.keys(row).sort()).toEqual(['fading', 'id', 'lastDay', 'learnt', 'onWay', 'pack', 'percent', 'scenes', 'total', 'who']);
   expect(JSON.stringify(row)).not.toContain('Test Pupil');
+  expect(JSON.stringify(row)).not.toContain('Prologue'); // the scenes go sealed too
   expect(row.percent).toBe(0);
 
   // No signal: nothing goes, and nothing is lost.
@@ -396,6 +406,10 @@ test('the director sees numbers once a phone has signal, and names only with bot
   await expect(page.locator('.staff-list li').filter({ hasText: 'Test Pupil' })).toContainText('Practised today');
   await expect(page.locator('.staff-list li').filter({ hasText: 'Sam Understudy' })).toContainText("On Whole Company's lines.");
   await expect(page.locator('.staff-list li').filter({ hasText: 'Not started' }).first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Chase first' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Scenes', exact: true })).toBeVisible();
+  await page.locator('.staff-list li').filter({ hasText: 'Test Pupil' }).getByText('Scene by scene').click();
+  await expect(page.locator('.staff-list li').filter({ hasText: 'Test Pupil' }).locator('.scene-pcs li').first()).toBeVisible();
   await page.reload();
   await expect(page.getByText(/^2 started,/)).toBeVisible({ timeout: 30000 });
   // A row left by a mistake goes, after a second tap, and no one else's does.

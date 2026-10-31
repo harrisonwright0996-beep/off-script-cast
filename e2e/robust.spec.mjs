@@ -1,12 +1,12 @@
 // When things go wrong on a phone: a second tab, a push after everything was removed, an app that will not start.
 import { readFileSync } from 'node:fs';
-import { test, expect, importScript, open } from './helpers.mjs';
+import { test, expect, importScript, open, more } from './helpers.mjs';
 
 const started = (page) => page.getByRole('button', { name: 'Carry on without installing' }).or(page.getByLabel('Company code'));
 
 async function removeEverything(page) {
   page.once('dialog', (d) => d.dismiss());
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await more(page, 'Settings');
   await page.getByRole('button', { name: 'Remove everything' }).click();
   await expect(page.getByRole('heading', { name: 'Remove everything?' })).toBeVisible();
   await page.getByRole('button', { name: 'Remove everything' }).click();

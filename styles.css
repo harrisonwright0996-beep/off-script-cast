@@ -833,7 +833,7 @@ h1:focus-visible {
 .who { text-align: center; color: var(--muted); margin: 0; }
 
 .lights { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.5em; }
-.light { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25em 0.75em; padding: 0.5em 0.75em; background: var(--surface); border: 1px solid var(--border); border-radius: 0.6em; }
+.light { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25em 0.75em; width: 100%; padding: 0.5em 0.75em; background: var(--surface); color: var(--text); font: inherit; text-align: left; border: 1px solid var(--border); border-radius: 0.6em; cursor: pointer; }
 .lamp { flex: none; width: 1.1em; height: 1.1em; border: 2px solid var(--border); border-radius: 50%; overflow: hidden; }
 .lamp-fill { display: block; height: 100%; background: var(--accent); }
 .light.lit .lamp { box-shadow: 0 0 0.9em 0.2em var(--accent); }
@@ -896,3 +896,62 @@ h1:focus-visible {
   width: auto;
   margin-right: 0.4em;
 }
+
+/* Hear the cue */
+.cue-top { display: flex; align-items: center; justify-content: space-between; gap: 0.75em; }
+.cue-top .cue-label { margin: 0; }
+.hear-cue { min-height: 44px; padding-block: 0; }
+
+/* The director's page: who to chase, and scene by scene */
+.staff h2 { margin-top: 1.25em; }
+.chase-list { list-style: none; margin: 0; padding: 0; }
+.chase-list li { padding: 0.35em 0; border-bottom: 1px solid var(--raised); overflow-wrap: anywhere; }
+.scene-averages { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6em; }
+.scene-averages p { margin: 0 0 0.2em; }
+.scene-pcs summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--accent); }
+.scene-pcs ul { list-style: none; margin: 0; padding: 0; }
+.scene-pcs li { display: flex; justify-content: space-between; gap: 1em; padding: 0.15em 0; }
+
+/* Install: the steps played out on a drawn phone. The ring shows where the finger goes. */
+.demo { display: grid; gap: 0.5em; justify-items: center; margin-block: 0.5em; }
+.demo-screen {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  width: min(100%, 15em);
+  height: 15em;
+  overflow: hidden;
+  background: #f4f4f6;
+  color: #111;
+  border: 0.4em solid #222;
+  border-radius: 1.4em;
+  font-size: min(1em, 16px);
+}
+.demo-bar { display: flex; align-items: center; justify-content: center; gap: 0.5em; min-height: 3em; padding: 0.4em 0.6em; background: #e3e3e8; }
+.demo-top { position: absolute; top: 0; left: 0; right: 0; }
+.demo-address { flex: 1; min-width: 0; overflow: hidden; padding: 0.3em 0.6em; font-size: 0.75em; white-space: nowrap; text-overflow: ellipsis; background: #fff; border-radius: 1em; }
+.demo-url { margin: 0 auto auto; padding: 0.5em; font-size: 0.75em; }
+.demo-dots, .demo-share, .demo-add { position: relative; font-weight: 700; }
+.demo-share { display: grid; place-items: center; width: 1.8em; height: 1.8em; border: 2px solid #1a4d8f; border-radius: 0.3em; color: #1a4d8f; }
+.demo-sheet { margin: 0.5em; overflow: hidden; background: #fff; border-radius: 0.8em; }
+.demo-sheet-top { display: flex; justify-content: space-between; gap: 0.5em; padding: 0.5em 0.6em; font-size: 0.75em; }
+.demo-add { color: #1a4d8f; font-weight: 700; }
+.demo-row { position: relative; display: flex; align-items: center; gap: 0.5em; padding: 0.5em 0.7em; font-size: 0.85em; border-top: 1px solid #e3e3e8; }
+.demo-icon { width: 2.2em; height: 2.2em; border-radius: 0.5em; }
+.demo-home { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); align-content: start; align-items: start; justify-items: center; gap: 0.8em; padding: 1em; background: #1a4d8f; color: #fff; font-size: 0.8em; }
+.demo-app { width: 2.4em; height: 2.4em; background: #ffffff55; border-radius: 0.5em; }
+.demo-mine { position: relative; display: grid; justify-items: center; gap: 0.2em; }
+.demo-tap { position: absolute; top: 50%; right: 0.2em; width: 2.2em; height: 2.2em; margin-top: -1.1em; border: 3px solid #d0104c; border-radius: 50%; animation: demo-tap 1.2s ease-out infinite; pointer-events: none; }
+.demo-dots .demo-tap, .demo-share .demo-tap, .demo-add .demo-tap, .demo-mine .demo-tap { right: 50%; margin-right: -1.1em; }
+.demo-mine .demo-icon { width: 2.8em; height: 2.8em; }
+.demo-mine .demo-tap { top: 1.4em; width: 3.6em; height: 3.6em; margin-top: -1.8em; margin-right: -1.8em; }
+@keyframes demo-tap {
+  from { transform: scale(0.6); opacity: 1; }
+  to { transform: scale(1.4); opacity: 0.2; }
+}
+.demo-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.5em; width: 100%; }
+.demo-controls .btn { width: auto; flex: 0 1 auto; }
+.demo-count { min-width: 6em; text-align: center; color: var(--muted); }
+.demo-steps li { padding: 0.25em 0.4em; border-radius: 0.4em; }
+.demo-steps li.on { background: var(--raised); font-weight: 700; }

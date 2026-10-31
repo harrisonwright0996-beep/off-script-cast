@@ -1,6 +1,6 @@
 // Accessibility: axe on every screen, in every theme. No serious or critical problems allowed.
 import { createRequire } from 'node:module';
-import { test, expect, importScript, answerCard, keysOf, seedOnce } from './helpers.mjs';
+import { test, expect, importScript, answerCard, keysOf, seedOnce, more } from './helpers.mjs';
 
 const AXE = createRequire(import.meta.url).resolve('axe-core/axe.min.js');
 test.use({ bypassCSP: true }); // only so axe itself can be added to the page
@@ -76,25 +76,25 @@ for (const theme of ['stage', 'cream', 'light', 'dark']) {
     await check(page, 'card: first letters result', found);
     await page.getByRole('button', { name: 'Stop' }).click();
 
-    await page.getByRole('button', { name: 'Choose' }).click();
+    await more(page, 'Choose');
     await expect(page.getByRole('heading', { name: 'Choose' })).toBeVisible(); // drawn once any saved practice is read
     await check(page, 'choose', found);
     await page.getByLabel('Which lines').selectOption({ label: 'Every line' });
     await check(page, 'choose: every line', found);
     await page.getByRole('button', { name: 'Your lines', exact: true }).click();
-    await page.getByRole('button', { name: 'Run through' }).click();
+    await more(page, 'Run through');
     await expect(page.getByRole('heading', { name: 'Run through' })).toBeVisible();
     await check(page, 'run through', found);
     await page.getByRole('button', { name: 'Your lines', exact: true }).click();
 
-    await page.getByRole('button', { name: 'Read my lines' }).click();
+    await more(page, 'Read my lines');
     await check(page, 'scenes', found);
     await page.getByRole('button', { name: /Scene 1: The Harbour/ }).click();
     await check(page, 'reader', found);
     await page.getByRole('button', { name: 'Back', exact: true }).click();
     await page.getByRole('button', { name: 'Your lines', exact: true }).click();
 
-    await page.getByRole('button', { name: 'Settings' }).click();
+    await more(page, 'Settings');
     await check(page, 'settings', found);
     await page.getByRole('button', { name: 'Start again from 0%' }).click();
     await check(page, 'start again', found);
@@ -104,7 +104,7 @@ for (const theme of ['stage', 'cream', 'light', 'dark']) {
     await page.getByRole('button', { name: 'Keep its progress' }).click();
     await page.getByRole('button', { name: 'Back', exact: true }).click();
     await page.getByRole('button', { name: 'Your lines', exact: true }).click();
-    await page.getByRole('button', { name: 'Settings' }).click();
+    await more(page, 'Settings');
     await page.getByRole('button', { name: 'Remove everything' }).click();
     await check(page, 'remove everything', found);
     await page.getByRole('button', { name: 'Keep everything' }).click();
@@ -179,7 +179,7 @@ test('a disabled Start can be read, and an unlit scene dot can be seen, in every
     await page.evaluate(() => window.offScript.go('today'));
     await expect(page.locator('.light-pc').first()).toHaveText('0%');
     expect(await contrast(page, 'dot'), `dot in ${theme}`).toBeGreaterThanOrEqual(3);
-    await page.getByRole('button', { name: 'Choose' }).click();
+    await more(page, 'Choose');
     await page.getByLabel('Which lines').selectOption({ label: 'Lines still being learnt' });
     await expect(page.getByRole('button', { name: 'Start' })).toBeDisabled();
     expect(await contrast(page, 'start'), `Start in ${theme}`).toBeGreaterThanOrEqual(4.5);

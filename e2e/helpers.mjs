@@ -142,6 +142,12 @@ export async function importScript(page, url) {
   await expect(page.getByRole('heading', { name: 'Your lines' })).toBeVisible();
 }
 
+// Your lines shows one thing to do; everything else is under More.
+export async function more(page, name) {
+  await page.getByRole('button', { name: 'More', exact: true }).click();
+  await page.getByRole('button', { name }).click();
+}
+
 export const importPack = async () => {}; // the pack comes with the unlock
 
 export async function chooseFile(page, buttonName, file) {

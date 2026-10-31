@@ -35,6 +35,17 @@ const TAIL = 2;
 export const spokenRole = (label) => label.replace(/\s*\((as\b[^)]*)\)/i, ', $1').trim();
 
 // Time to say the line: about 2.3 words a second, plus 1.5 seconds to find it.
+// The clips of a line's cue, in order. A hearing on a card and a tape say it the same way.
+export function cueClips(it, index, manifest, long = true) {
+  const audio = (id) => manifest.items[id];
+  const more = long && index.cues && index.cues.get(it.id);
+  const first = more && more.lead[0];
+  const opener = first && (more.lines[0]?.speaker === null ? manifest.headings[it.scene] : audio(first)?.cue);
+  if (opener && more.lead.every(audio)) return [opener, ...more.lead.map((id) => audio(id).line)];
+  const one = it.cue.speaker === null ? manifest.headings[it.scene] : audio(it.id)?.cue;
+  return one ? [one] : [];
+}
+
 export function gapSeconds(words, setting = 'normal') {
   return (words / 2.3 + 1.5) * (GAP_FACTOR[setting] ?? 1);
 }
@@ -80,17 +91,7 @@ export function buildWalk({ model, index, manifest, getState, settings, plan, st
   // (uniqueCues) plays the first lead line's cue and then each lead line, from clips the pack already
   // has, or the usual clip if any of them is missing. Not to open a new beat, just before it is heard.
   // Lead lines are often someone else's, so they may not be in this model: only their clips are.
-  const cue = (it, long = true) => {
-    const more = long && index.cues && index.cues.get(it.id);
-    const first = more && more.lead[0];
-    const opener = first && (more.lines[0]?.speaker === null ? manifest.headings[it.scene] : audio(first)?.cue);
-    if (opener && more.lead.every(audio)) {
-      clip(opener);
-      for (const id of more.lead) clip(audio(id).line);
-      return;
-    }
-    clip(it.cue.speaker === null ? manifest.headings[it.scene] : audio(it.id).cue);
-  };
+  const cue = (it, long = true) => cueClips(it, index, manifest, long).forEach(clip);
   // The coach: a clip if the pack has one (a tape works without), and the same words on screen.
   const says = (key) => {
     const ref = manifest.coach && manifest.coach[key];

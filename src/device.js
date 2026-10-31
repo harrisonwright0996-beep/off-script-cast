@@ -15,6 +15,9 @@ export function detect({ ua = '', platform = '', touch = 0, standalone = false }
   return 'desktop';
 }
 
+// Safari 26 keeps Share behind three dots beside the address bar; before that, it was on the bar.
+export const safariHasDots = (ua) => Number(/Version\/(\d+)/.exec(ua)?.[1] ?? 0) >= 26;
+
 export const thisDevice = () =>
   detect({
     ua: navigator.userAgent,

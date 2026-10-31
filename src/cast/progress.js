@@ -4,9 +4,16 @@
 // waits: the next try sends the latest.
 import { post } from './client.js';
 import { sealText } from './pack.js';
-import { fadingCount, isLearnt, learntPercent, onWayCount } from './proof.js';
+import { fadingCount, isLearnt, learntPercent, onWayCount, sceneLights } from './proof.js';
 
 const ROW = 'progressId';
+const SCENES_MOST = 480; // sealed: a row has to fit in the worker's 1,024 bytes
+
+// Each scene's %, short: 1=40|2=100|Prologue=0. Sealed with the name, so the worker cannot read it.
+export const sceneLine = (model, getState) =>
+  sceneLights(model, getState)
+    .map((l) => `${/^Scene (\d+)/i.exec(l.heading)?.[1] ?? l.heading.split(':')[0].slice(0, 12).replace(/[|=]/g, ' ')}=${l.percent}`)
+    .join('|');
 
 export function progressOf(ctx) {
   const days = [...ctx.states.values()].flatMap((s) => [s.lastDay, s.walkDay]).filter(Boolean).sort();
@@ -17,6 +24,7 @@ export function progressOf(ctx) {
     total: ctx.model.items.length,
     fading: fadingCount(ctx.plan().ready, ctx.getState),
     onWay: onWayCount(ctx.model, ctx.getState),
+    scenes: sceneLine(ctx.model, ctx.getState),
     lastDay: days.length ? days[days.length - 1] : null,
   };
 }
@@ -36,7 +44,8 @@ export async function report(ctx) {
     const row = { id, ...progressOf(ctx) };
     const said = JSON.stringify({ ...row, name });
     if (said === (await ctx.store.get('reported'))) return;
-    const res = await post('/progress', ctx.keys.token, { ...row, who: await sealText(ctx.keys.key, name) });
+    const scenes = await sealText(ctx.keys.key, row.scenes);
+    const res = await post('/progress', ctx.keys.token, { ...row, who: await sealText(ctx.keys.key, name), scenes: scenes.length <= SCENES_MOST ? scenes : undefined });
     if (res.ok) await ctx.store.set('reported', said);
   } catch {
     // no signal: nothing to do

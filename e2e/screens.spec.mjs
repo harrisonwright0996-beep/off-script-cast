@@ -1,11 +1,11 @@
 import { readFileSync } from 'node:fs';
-import { test, expect, importScript, importPack, answerCard, chooseFile, enrol, open, fakeWorker, CODE } from './helpers.mjs';
+import { test, expect, importScript, importPack, answerCard, chooseFile, enrol, open, fakeWorker, CODE, more } from './helpers.mjs';
 
 const shot = (page, name) => page.screenshot({ path: `shots/${test.info().project.name}-${name}.png`, fullPage: true });
 
 test('scenes and the reader: numbers, brackets, on screen text; learn a scene next; run it', async ({ page }) => {
   await importScript(page);
-  await page.getByRole('button', { name: 'Read my lines' }).click();
+  await more(page, 'Read my lines');
   await expect(page.getByRole('heading', { name: 'Read my lines' })).toBeVisible();
   await expect(page.getByText('lines word perfect', { exact: false }).first()).toBeVisible();
   await page.getByRole('button', { name: /Scene 3: Landfall/ }).click();
@@ -34,7 +34,7 @@ test('settings: look changes at once; back up, restore, remove everything', asyn
   await page.getByRole('button', { name: 'Start learning' }).click();
   for (let i = 0; i < 10; i++) await answerCard(page); // the first beat read, then into its run
   await page.getByRole('button', { name: 'Stop' }).click();
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await more(page, 'Settings');
   await page.getByLabel('Colours').selectOption({ label: 'Dark' });
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.getByLabel('Text size').selectOption({ label: '150%' });
@@ -58,7 +58,7 @@ test('settings: look changes at once; back up, restore, remove everything', asyn
   await importScript(page);
   expect(await page.evaluate(() => window.offScript.states.size)).toBe(0);
 
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await more(page, 'Settings');
   await chooseFile(page, 'Restore a backup', { name: 'Off Script progress.json', mimeType: 'application/json', buffer: readFileSync(file) });
   await expect(page.getByRole('heading', { name: 'Restore this backup?' })).toBeVisible();
   await page.getByRole('button', { name: 'Restore', exact: true }).click();
@@ -85,7 +85,7 @@ test('start again from 0%: every line back to not started; the lines, audio and 
   await page.getByRole('button', { name: 'Start learning' }).click();
   for (let i = 0; i < 10; i++) await answerCard(page); // the first beat read, then into its run
   await page.getByRole('button', { name: 'Stop' }).click();
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await more(page, 'Settings');
   await page.getByLabel('Colours').selectOption({ label: 'Dark' });
   await page.getByRole('button', { name: 'Start again from 0%' }).click();
   await expect(page.getByRole('heading', { name: 'Start again from 0%?' })).toBeVisible();
@@ -104,7 +104,7 @@ test('start again from 0%: every line back to not started; the lines, audio and 
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible(); // the script stays
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark'); // and the settings
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await more(page, 'Settings');
   expect(await page.evaluate(() => !!window.offScript.manifest)).toBe(true); // and the audio
   await expect(page.getByRole('button', { name: 'Start again from 0%' })).toHaveCount(0); // nothing to start again
   await page.getByRole('button', { name: 'Your lines', exact: true }).click();
@@ -119,7 +119,7 @@ test('start this scene again: its lines go back to not started, other scenes kee
   await page.waitForFunction(() => window.offScript.card.step === 'floor');
   await answerCard(page); // the Prologue's first line, right at the first try
   await page.getByRole('button', { name: 'Stop' }).click();
-  await page.getByRole('button', { name: 'Choose' }).click();
+  await more(page, 'Choose');
   await page.getByLabel('Where').selectOption({ label: 'Scene 1: The Harbour' });
   await page.getByLabel('Which lines').selectOption({ label: 'Every line' });
   await page.getByLabel('How much help').selectOption({ label: 'No help' });
@@ -130,7 +130,7 @@ test('start this scene again: its lines go back to not started, other scenes kee
   expect(prologue.states).toBe(1);
   expect((await kept(page, 1)).states).toBe(3);
 
-  await page.getByRole('button', { name: 'Read my lines' }).click();
+  await more(page, 'Read my lines');
   await page.getByRole('button', { name: /Prologue/ }).click();
   await expect(page.getByRole('button', { name: 'Start this scene again' })).toBeVisible();
   await page.getByRole('button', { name: 'Back', exact: true }).click();
@@ -184,6 +184,44 @@ for (const width of [393, 320]) {
   });
 }
 
+test('Your lines shows one thing to do; the rest is under More, and a scene can be tapped', async ({ page }) => {
+  await importScript(page);
+  await expect(page.locator('footer .btn')).toHaveText(['Start learning', 'Walk', 'More']);
+  await page.getByRole('button', { name: 'More', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'More' })).toBeVisible();
+  await page.getByRole('button', { name: 'Your lines' }).click();
+  await page.locator('.lights button').first().click();
+  await expect(page.locator('.lead')).toHaveText('0% learnt');
+  await expect(page.locator('footer .btn')).toHaveText(['Learn this scene', 'Read this scene']);
+  const scene = await page.locator('h1').textContent();
+  await page.getByRole('button', { name: 'Read this scene' }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Learn this scene' })).toBeVisible();
+  await page.getByRole('button', { name: 'Learn this scene' }).click();
+  await page.waitForFunction(() => window.offScript.card);
+  const shown = await page.evaluate(() => window.offScript.model.scenes[window.offScript.card.item.scene].heading);
+  expect(shown).toBe(scene);
+});
+
+test('every card can say its cue aloud, and hearing it does not change the card', async ({ page }) => {
+  await importScript(page);
+  await page.getByRole('button', { name: 'Start learning' }).click();
+  await page.waitForFunction(() => window.offScript.card);
+  const id = await page.evaluate(() => {
+    window.played = [];
+    HTMLMediaElement.prototype.play = function play() {
+      window.played.push(this.src);
+      return Promise.resolve();
+    };
+    return window.offScript.card.item.id;
+  });
+  await expect(async () => {
+    await page.getByRole('button', { name: 'Hear the cue' }).click();
+    expect(await page.evaluate(() => window.played.at(-1))).toMatch(/^blob:/); // the pack's own voices
+  }).toPass();
+  expect(await page.evaluate(() => window.offScript.card.item.id)).toBe(id);
+});
+
 test('a phone on its side: the keypad leaves room for the line', async ({ page }) => {
   await page.setViewportSize({ width: 568, height: 320 });
   await importScript(page);
@@ -207,7 +245,8 @@ test('big text on a small phone: the footer goes with the page, the ring fits, n
     });
   for (const textSize of [175, 200]) {
     await page.evaluate((textSize) => window.offScript.saveSettings({ textSize }).then(() => window.offScript.go('today')), textSize);
-    await expect(page.locator('footer')).toHaveCSS('position', 'static');
+    // Big enough to crowd the page, it goes with the page; otherwise it may stay.
+    await expect.poll(() => page.locator('footer').evaluate((el) => getComputedStyle(el).position === 'static' || el.offsetHeight <= 0.4 * innerHeight)).toBe(true);
     expect(await sideways(page)).toBe(0);
     const [ring, num, main] = await Promise.all(['.ring', '.ring-num', 'main'].map((s) => page.locator(s).evaluate((el) => el.getBoundingClientRect().toJSON())));
     expect(ring.right).toBeLessThanOrEqual(main.right);
@@ -411,7 +450,7 @@ test('Remove everything tells the worker to forget the reminders first', async (
     if (window.Notification) Object.defineProperty(Notification, 'permission', { get: () => 'granted' });
     await window.offScript.store.set('push', { id: 'a-reminder' });
   });
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await more(page, 'Settings');
   await page.getByRole('button', { name: 'Remove everything from this phone' }).click();
   await page.getByRole('button', { name: 'Remove everything' }).click();
   await expect(page.getByLabel('Company code').or(page.getByRole('button', { name: 'Carry on without installing' }))).toBeVisible();
@@ -446,7 +485,7 @@ test.describe('on Android', () => {
 
 test('Settings offers Install on a phone not yet installed', async ({ page }, info) => {
   await importScript(page);
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await more(page, 'Settings');
   const install = page.getByRole('button', { name: 'Install Off Script' });
   if (info.project.name === 'webkit') {
     await install.click();

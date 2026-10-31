@@ -9,7 +9,9 @@ import { createTypeCheck, makeResult, sameKey } from '../src/grade.js';
 import { tokenize } from '../src/tokens.js';
 import { newState } from '../src/state.js';
 import { nextNudge } from '../src/cast/reminders.js';
-import { sameFirstName, staffRows } from '../src/ui/staff.js';
+import { chaseList, sameFirstName, sceneAverages, sceneList, staffRows } from '../src/ui/staff.js';
+import { sceneLine } from '../src/cast/progress.js';
+import { safariHasDots } from '../src/device.js';
 import { roundMinutes } from '../src/settings.js';
 import { handle, tick } from '../worker/index.js';
 import { tokenHash } from '../src/cast/pack.js';
@@ -189,4 +191,47 @@ test('after the show nothing is sent and what is left goes', async () => {
 test('a big part starts on long rounds, a small one on normal rounds', () => {
   assert.equal(roundMinutes(60), 5);
   assert.equal(roundMinutes(61), 8);
+});
+
+test('with lines still to learn, the next reminder comes later the same day, and never late at night', () => {
+  const app = fakeApp();
+  const at = (hour) => new Date(2026, 10, 2, hour, 0).getTime();
+  const args = (now) => ({ model: app.model, getState: app.getState, now });
+  assert.equal(nextNudge(args(at(16))), at(19));
+  assert.ok(nextNudge(args(at(18))) > at(24), 'too late tonight: tomorrow');
+  learn(app, app.model.items.map((it) => it.id), { proved: true });
+  assert.ok(nextNudge(args(at(16))) >= at(16) + 20 * 3600000, 'every line learnt: a day apart');
+});
+
+test('a phone sends each scene short, and the director reads it back', () => {
+  const app = fakeApp();
+  const text = sceneLine(app.model, app.getState);
+  assert.match(text, /^[^|=]+=\d+(\|[^|=]+=\d+)*$/);
+  assert.deepEqual(sceneList('1=40|Prologue=100'), [{ label: 'Scene 1', percent: 40 }, { label: 'Prologue', percent: 100 }]);
+  assert.deepEqual(sceneList(undefined), []);
+  assert.deepEqual(sceneAverages([{ scenes: '1=40|2=100' }, { scenes: '1=60' }, {}]), [{ label: 'Scene 1', percent: 50, pupils: 2 }, { label: 'Scene 2', percent: 100, pupils: 1 }]);
+});
+
+test('the chase list says who and why, and keeps parts with no one on them in one line', () => {
+  const rows = [
+    { name: 'Keeper' },
+    { name: 'Ann', percent: 0, lastDay: null, fading: 0 },
+    { name: 'Ben', percent: 40, lastDay: '2026-10-28', fading: 0 },
+    { name: 'Cal', percent: 60, lastDay: '2026-10-31', fading: 6 },
+    { name: 'Dee', percent: 80, lastDay: '2026-10-31', fading: 1 },
+  ];
+  assert.deepEqual(chaseList(rows, '2026-10-31'), {
+    waiting: ['Keeper'],
+    chase: [
+      { name: 'Ann', why: 'Opened the app, no practice yet.' },
+      { name: 'Ben', why: 'No practice for 3 days.' },
+      { name: 'Cal', why: '6 lines fading.' },
+    ],
+  });
+});
+
+test('Safari 26 keeps Share behind the three dots; older Safari has it on the bar', () => {
+  assert.equal(safariHasDots('Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) Version/26.0 Mobile/15E148 Safari/604.1'), true);
+  assert.equal(safariHasDots('Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) Version/17.5 Mobile/15E148 Safari/604.1'), false);
+  assert.equal(safariHasDots('nothing to go on'), false);
 });

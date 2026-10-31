@@ -7,6 +7,7 @@ import { h, clear, screen, button, announce, focusHeading, plural, settled } fro
 import { createTypeCheck, makeResult } from '../grade.js';
 import { keypad, TYPE_HINT } from './keypad.js';
 import { cueBlock, keepInView, newestWord, tokenView } from './sprint.js';
+import { hearCue } from './hearcue.js';
 import { cueOf } from '../items.js';
 import { applyKnown } from '../state.js';
 import { dayKey } from '../dates.js';
@@ -85,7 +86,7 @@ export async function showCheckin(ctx, { intro = false } = {}) {
     const hint = h('p', { class: 'help type-hint' }, TYPE_HINT);
     show(
       ctx.model.scenes[item.scene].heading,
-      [lastResult(), h('p', { class: 'where' }, `Checking your lines: ${pos + 1} of ${queue.length}`), cueBlock(cueOf(ctx.index, item)), h('p', { class: 'speaker' }, item.speaker), hint, line, button('That is enough, teach me', settled(finish), { class: 'btn link' })],
+      [lastResult(), h('p', { class: 'where' }, `Checking your lines: ${pos + 1} of ${queue.length}`), cueBlock(cueOf(ctx.index, item), hearCue(ctx, item, cueOf(ctx.index, item))), h('p', { class: 'speaker' }, item.speaker), hint, line, button('That is enough, teach me', settled(finish), { class: 'btn link' })],
       [pad.el],
       'keyboard',
     );

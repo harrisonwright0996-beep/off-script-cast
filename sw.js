@@ -1,7 +1,7 @@
 // Offline: every app file is cached under one version name and served from the cache first.
 // A new version waits until Off Script asks for it (Update now on Today), so nothing reloads in the
 // middle of a sprint. Change VERSION with every release.
-const VERSION = 'off-script-cast-10';
+const VERSION = 'off-script-cast-11';
 const FILES = [
   './',
   'styles.css',
@@ -43,6 +43,7 @@ const FILES = [
   'src/ui/checkin.js',
   'src/ui/choose.js',
   'src/ui/dom.js',
+  'src/ui/hearcue.js',
   'src/ui/install.js',
   'src/ui/keypad.js',
   'src/ui/offer.js',

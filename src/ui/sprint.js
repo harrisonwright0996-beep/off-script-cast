@@ -8,12 +8,14 @@ import { createSession, linesLeft } from '../session.js';
 import { createTypeCheck, onlySlip, sayMisses, makeResult, describeResult, repeatMisses, troubleNote } from '../grade.js';
 import { blankOf, firstLettersOf, gapsOf, lettersShown } from '../tokens.js';
 import { canSpeak, speak, stopSpeaking } from '../tts.js';
+import { hearCue } from './hearcue.js';
 import { keypad, TYPE_HINT } from './keypad.js';
 import { reminderOffer } from './offer.js';
 import { sync } from '../cast/reminders.js';
 import { scienceNote } from '../cast/science.js';
 
 const SAVED = 'sprint';
+const AGAIN = 'Come back for another round later today. A few short rounds a day is what makes lines stick.';
 export const PRACTICE = 'practice'; // a chosen practice, saved apart from the day's sprint
 const IDLE_CAP = 150000; // a longer pause between taps was a break: it is not counted as sprint time
 const AUTO_ADVANCE_MS = 1200;
@@ -34,10 +36,10 @@ export function tokenView(tokens, upTo = tokens.length, misses = new Set()) {
 
 // The cue: who speaks and what they say, or the start of a scene. A cue made longer, so that only
 // one line fits, shows the lines before it too, and which time it comes if the exchange repeats.
-export function cueBlock(cue) {
+export function cueBlock(cue, hear = null) {
   const say = (l) => (l.speaker === null ? h('p', {}, `Start of ${l.text}`) : h('p', {}, h('strong', {}, l.speaker), ': ', l.text));
   const nth = cue.nth ? h('p', { class: 'note' }, `The ${ORDINALS[cue.nth - 1] || `number ${cue.nth}`} time these lines come in the scene.`) : null;
-  return h('div', { class: 'cue' }, h('p', { class: 'cue-label' }, 'Cue'), (cue.lines || [cue]).map(say), cue.notes.map((n) => h('p', { class: 'note' }, n)), nth);
+  return h('div', { class: 'cue' }, h('div', { class: 'cue-top' }, h('p', { class: 'cue-label' }, 'Cue'), hear), (cue.lines || [cue]).map(say), cue.notes.map((n) => h('p', { class: 'note' }, n)), nth);
 }
 
 const blankView = (t, drawn = blankOf(t)) => h('span', { class: 'blank' }, h('span', { 'aria-hidden': 'true' }, drawn), h('span', { class: 'visually-hidden' }, ` ${blankOf(t).replace('_', 'blank')} `));
@@ -212,14 +214,14 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
   function showCard(c, focus = true) {
     ctx.card = c; // the card on show, for browser tests
     if (c.step === 'test') {
-      frame(c, [cueBlock(c.cue), h('p', { class: 'prompt' }, 'Do you know the next line?')], [
+      frame(c, [cueBlock(c.cue, hearCue(ctx, c.item, c.cue)), h('p', { class: 'prompt' }, 'Do you know the next line?')], [
         button('Try it', act(() => choose('try')), { class: 'btn primary' }),
         button('Teach me', act(() => choose('teach'))),
       ]);
     } else if (c.step === 'front') {
       frame(
         c,
-        [cueBlock(c.cue), h('p', { class: 'speaker' }, c.item.speaker), h('p', { class: 'line' }, tokenView(c.item.tokens)), h('p', { class: 'prompt' }, c.prompt)],
+        [cueBlock(c.cue, hearCue(ctx, c.item, c.cue)), h('p', { class: 'speaker' }, c.item.speaker), h('p', { class: 'line' }, tokenView(c.item.tokens)), h('p', { class: 'prompt' }, c.prompt)],
         [button('Next', act(() => choose('next')), { class: 'btn primary' }), readAloud(c.item.text)].filter(Boolean),
       );
     } else if (c.step === 'help' || c.step === 'gaps') helpCard(c);
@@ -287,7 +289,7 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     const footBox = h('div', { class: 'stack-foot' });
     const blanks = item.tokens.some((t, i) => t.k !== null && !shown.has(i));
     const prompt = c.step === 'gaps' ? 'Say the whole line aloud, filling the gaps, then reveal it.' : blanks ? 'Say the whole line aloud, filling the blanks, then reveal it.' : 'Each letter starts a word. Say the whole line aloud, then reveal it.';
-    frame(c, [cueBlock(c.cue), h('p', { class: 'speaker' }, speakerName(item)), answerArea], [footBox]);
+    frame(c, [cueBlock(c.cue, hearCue(ctx, c.item, c.cue)), h('p', { class: 'speaker' }, speakerName(item)), answerArea], [footBox]);
     sayCheck(item.tokens, answerArea, footBox, prompt, (misses, ms) => finish(c, makeResult({ misses, mode: 'say', ms })));
   }
 
@@ -312,7 +314,7 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     const spotText = c.spot ? 'Spot check: type this one.' : 'Type this one so it counts towards your %.';
     const spot = locked ? h('p', { class: 'spot' }, spotText) : null;
 
-    frame(c, [cueBlock(c.cue), spot, speakerArea, answerArea, switchMode], [footBox]);
+    frame(c, [cueBlock(c.cue, hearCue(ctx, c.item, c.cue)), spot, speakerArea, answerArea, switchMode], [footBox]);
     if (locked) announce(spotText);
     const foot = ctx.root.querySelector('footer');
 
@@ -477,7 +479,7 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     frame(
       { ...c, message: null },
       [
-        cueBlock(c.cue),
+        cueBlock(c.cue, hearCue(ctx, c.item, c.cue)),
         h('p', { class: 'speaker' }, c.item.speaker),
         h('p', { class: 'line' }, tokenView(c.item.tokens, c.item.tokens.length, misses)),
         block,
@@ -565,8 +567,8 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
       );
     }
     const left = chosen ? linesLeft(session.state) : 0;
-    // A big part needs more than one round a day. Said lightly: there is no time to spend.
-    const more = !chosen && !custom && !ctx.plan().done ? h('p', {}, 'There is more ready for you today, if you have time.') : null;
+    // Pupils do several rounds a day. Said lightly: there is no time to spend.
+    const more = !chosen && !custom ? h('p', {}, AGAIN) : null;
     Promise.all([science(), reminderOffer(ctx)]).then(([note, offer]) =>
       plain('Round done', [headline(said), left ? h('p', {}, `${plural(left, 'line')} of this ${chosen.run ? 'run through' : 'practice'} still to go.`) : null, more, offer, note], [
         left
@@ -593,7 +595,7 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     if (custom) {
       const offer = await reminderOffer(ctx);
       return plain('Run done', [h('p', { class: 'lead' }, `That was a run of ${heading(custom.scene)}.`), said, offer], [
-        button('Back to the scene', act(() => ctx.go('reader', { scene: custom.scene })), { class: 'btn primary' }),
+        button('Back to the scene', act(() => ctx.go('scene', { scene: custom.scene })), { class: 'btn primary' }),
         button('Back to your lines', act(() => ctx.go('today'))),
       ]);
     }

@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { test, expect, enrol, importScript, answerCard, keysOf, seedOnce } from './helpers.mjs';
+import { test, expect, enrol, importScript, answerCard, keysOf, seedOnce, more } from './helpers.mjs';
 import { fixtureModel } from '../tests/helpers.mjs';
 import { blankOf, firstLettersOf, gapsOf, joinTokens, phraseStarts } from '../src/tokens.js';
 
@@ -411,7 +411,7 @@ test('a Quick round after a stopped long round has its own time', async ({ page 
     const s = await o.store.get('sprint');
     await o.store.set('sprint', { ...s, elapsed: 130000 });
   });
-  await page.getByRole('button', { name: 'Quick round' }).click();
+  await more(page, 'Quick round');
   await expect(page.locator('.cue')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Keep going?' })).toHaveCount(0);
 });

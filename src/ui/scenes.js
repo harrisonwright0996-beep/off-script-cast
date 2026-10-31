@@ -2,9 +2,37 @@
 // directions in square brackets (never italics), on screen text marked as such.
 import { h, screen, button, announce, settled } from './dom.js';
 import { linesToCheck } from './checkin.js';
+import { sceneLights } from '../cast/proof.js';
 import { progressOf } from '../plan.js';
 import { bracketParens } from '../items.js';
 import { canSpeak, speak, stopSpeaking } from '../tts.js';
+
+// A scene tapped on Your lines: what to do with it, in the fewest words. A new line learnt here is a
+// normal round, so it counts. Going over lines already started is practice: it says so.
+export function showScene(ctx, { scene: index }) {
+  const scene = ctx.model.scenes[index];
+  const percent = sceneLights(ctx.model, ctx.getState).find((l) => l.scene === index)?.percent ?? 0;
+  const fresh = scene.itemIds.some((id) => ctx.getState(id).status === 'new');
+  const started = scene.itemIds.some((id) => ctx.getState(id).status !== 'new');
+  const learn = settled(async () => {
+    await ctx.saveSettings({ focusScene: index });
+    ctx.go('sprint');
+  });
+  const practise = () => ctx.go('sprint', { custom: { scene: index, itemIds: [...scene.itemIds] } });
+  ctx.root.append(
+    screen({
+      title: scene.heading,
+      back: () => ctx.go('today'),
+      backLabel: 'Your lines',
+      body: [h('p', { class: 'lead' }, `${percent}% learnt`), started ? h('p', { class: 'help' }, 'Practising a scene gets you ready. Your % moves in your next round.') : null],
+      footer: [
+        fresh ? button('Learn this scene', learn, { class: 'btn primary' }) : null,
+        started ? button('Practise this scene', practise, { class: fresh ? 'btn' : 'btn primary' }) : null,
+        button('Read this scene', () => ctx.go('reader', { scene: index, from: 'scene' })),
+      ].filter(Boolean),
+    }),
+  );
+}
 
 export function showScenes(ctx) {
   const progress = progressOf(ctx.model, ctx.index, ctx.getState);
@@ -59,7 +87,7 @@ function parts(scene) {
   });
 }
 
-export function showReader(ctx, { scene: index }) {
+export function showReader(ctx, { scene: index, from = 'scenes' }) {
   const scene = ctx.model.scenes[index];
   ctx.peek(scene.itemIds); // reading a line just before typing it would prove nothing
   const all = parts(scene);
@@ -113,7 +141,7 @@ export function showReader(ctx, { scene: index }) {
   ctx.root.append(
     screen({
       title: scene.heading,
-      back: () => ctx.go('scenes'),
+      back: () => ctx.go(from, { scene: index }),
       body: [
         h('div', { class: 'reader' }, all.map((p) => p.el)),
         learned

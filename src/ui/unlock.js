@@ -128,7 +128,7 @@ export function showUnlock(ctx) {
 }
 
 // What goes off the phone, said before a name is picked and in Settings.
-export const SEEN = 'Your director can see your name, whose lines you are learning, how much you have learnt, how many lines are fading and when you last practised.';
+export const SEEN = 'Your director can see your name, whose lines you are learning, how much you have learnt in each scene, how many lines are fading and when you last practised.';
 
 // The pupil's own name, typed: an understudy picks the part they are learning, so the part alone does
 // not say who this is. Sealed before it leaves the phone. Asked once, and of a phone that has none yet.

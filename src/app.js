@@ -10,9 +10,9 @@ import { h, button, clear, screen, focusHeading, settled } from './ui/dom.js';
 import { showInstall, needsInstall } from './ui/install.js';
 import { showUnlock } from './ui/unlock.js';
 import { showCheckin } from './ui/checkin.js';
-import { showStage } from './ui/stage.js';
+import { showMore, showStage } from './ui/stage.js';
 import { showSprint } from './ui/sprint.js';
-import { showScenes, showReader } from './ui/scenes.js';
+import { showScene, showScenes, showReader } from './ui/scenes.js';
 import { showSettings, wipePhone } from './ui/settings.js';
 import { showWalk } from './ui/walk.js';
 import { showChoose } from './ui/choose.js';
@@ -30,7 +30,7 @@ async function showEnded(ctx) {
   ctx.root.append(screen({ title: 'Off Script', body: [h('p', { class: 'lead' }, 'The show is over, so your lines have been removed from this phone. Well done.')] }));
 }
 
-const SCREENS = { install: showInstall, unlock: showUnlock, checkin: showCheckin, today: showStage, sprint: showSprint, scenes: showScenes, reader: showReader, settings: showSettings, walk: showWalk, choose: showChoose, again: showStartAgain, ended: showEnded };
+const SCREENS = { install: showInstall, unlock: showUnlock, checkin: showCheckin, today: showStage, more: showMore, scene: showScene, sprint: showSprint, scenes: showScenes, reader: showReader, settings: showSettings, walk: showWalk, choose: showChoose, again: showStartAgain, ended: showEnded };
 
 export function applyLook(s) {
   const root = document.documentElement;

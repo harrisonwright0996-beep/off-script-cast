@@ -9,7 +9,9 @@ import { phaseOf } from '../plan.js';
 import { addDays, dayKey } from '../dates.js';
 import { report } from './progress.js';
 
-const MIN_GAP = 20 * HOUR;
+const MIN_GAP = 20 * HOUR; // once every line is learnt, a day apart is enough
+const NEXT_ROUND = 3 * HOUR; // lines still to learn: pupils do several rounds a day
+const LAST_ROUND = 20; // no later today than this: the worker's window closes soon after
 const MAX_GAP = 7 * 24 * HOUR;
 const FADING = 3; // lines going before it is worth a nudge
 const AFTERNOON = 16; // the next afternoon, when there are new lines to learn
@@ -39,12 +41,15 @@ function reasons({ model, getState, k = 1, now, settings }) {
   const anyNew = model.items.some((it) => !isLearnt(getState(it.id)));
   const d = new Date(now + MIN_GAP);
   d.setHours(AFTERNOON, 30, 0, 0);
-  return { fading: Math.min(fading, nextEveryDay(settings, now)), afternoon: anyNew ? d.getTime() : Infinity };
+  const tonight = new Date(now);
+  tonight.setHours(LAST_ROUND, 0, 0, 0);
+  const next = now + NEXT_ROUND <= tonight.getTime() ? now + NEXT_ROUND : d.getTime();
+  return { fading: Math.min(fading, nextEveryDay(settings, now)), afternoon: anyNew ? next : Infinity, gap: anyNew ? NEXT_ROUND : MIN_GAP };
 }
 
 export function nextNudge(args) {
-  const { fading, afternoon } = reasons(args);
-  return Math.min(args.now + MAX_GAP, Math.max(args.now + MIN_GAP, Math.min(fading, afternoon)));
+  const { fading, afternoon, gap } = reasons(args);
+  return Math.min(args.now + MAX_GAP, Math.max(args.now + gap, Math.min(fading, afternoon)));
 }
 
 // Why the next nudge comes: 'new' when it is for the new lines left and nothing is fading first.
@@ -60,7 +65,7 @@ const WORDS = {
     'Your brain is ready for another go. Just a quick round?',
     'Lines you have started are slipping a little. Catch them now and they last longer.',
   ],
-  new: ['Your lines are ready when you are. Fancy a quick round?'],
+  new: ['Your lines are ready when you are. Fancy a quick round?', 'Time for another round? A few short ones a day is what works.'],
   learnt: [
     'You know your lines. A quick round keeps them fresh.',
     'Lines you know still fade if you leave them. A quick round keeps them safe.',

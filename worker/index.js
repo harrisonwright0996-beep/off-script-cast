@@ -61,11 +61,12 @@ const DAY_FORM = /^20\d{2}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 // who is left out by a phone not yet updated: the row then shows the part. onWay likewise.
 function progressRow(b, now) {
   const count = (n) => Number.isInteger(n) && n >= 0 && n <= 5000;
-  const good = isId(b?.id) && is(b.pack, /^p[a-f0-9]{32}$/) && (b.who === undefined || is(b.who, /^[A-Za-z0-9+/=]{1,260}$/)) && Number.isInteger(b.percent) && b.percent >= 0 && b.percent <= 100 && count(b.learnt) && count(b.total) && b.learnt <= b.total && count(b.fading) && (b.onWay === undefined || count(b.onWay));
+  const good = isId(b?.id) && is(b.pack, /^p[a-f0-9]{32}$/) && (b.who === undefined || is(b.who, /^[A-Za-z0-9+/=]{1,260}$/)) && (b.scenes === undefined || is(b.scenes, /^[A-Za-z0-9+/=]{1,480}$/)) && Number.isInteger(b.percent) && b.percent >= 0 && b.percent <= 100 && count(b.learnt) && count(b.total) && b.learnt <= b.total && count(b.fading) && (b.onWay === undefined || count(b.onWay));
   if (!good || (b.lastDay !== null && !is(b.lastDay, DAY_FORM))) return null;
   const row = { id: b.id, pack: b.pack, percent: b.percent, learnt: b.learnt, total: b.total, fading: b.fading, lastDay: b.lastDay, seen: now };
   if (b.who !== undefined) row.who = b.who;
   if (b.onWay !== undefined) row.onWay = b.onWay;
+  if (b.scenes !== undefined) row.scenes = b.scenes;
   return row;
 }
 
