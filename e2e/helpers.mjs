@@ -75,7 +75,7 @@ async function workerFiles() {
 const faked = new WeakMap();
 export const STAFF = 'night-ferry-staff-code';
 
-export async function fakeWorker(page, { calls = [], progress = {} } = {}) {
+export async function fakeWorker(page, { calls = [], progress = {}, listLags = () => false } = {}) {
   if (faked.has(page)) {
     faked.get(page).calls = calls;
     return;
@@ -87,7 +87,7 @@ export async function fakeWorker(page, { calls = [], progress = {} } = {}) {
     seen.calls.push(path);
     if (path === '/staff/remove') {
       if (headers['x-staff-token'] !== STAFF) return { status: 401 };
-      delete seen.progress[JSON.parse(body).id];
+      if (!listLags()) delete seen.progress[JSON.parse(body).id]; // listLags: as the real list, for a minute or so
       return { status: 204 };
     }
     if (path === '/staff') return headers['x-staff-token'] === STAFF ? { status: 200, bytes: Buffer.from(JSON.stringify(Object.values(seen.progress))).toString('base64') } : { status: 401 };

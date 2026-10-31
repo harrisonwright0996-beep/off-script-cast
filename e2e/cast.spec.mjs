@@ -375,7 +375,8 @@ test('typing is explained with the keypad; one wrong word on a long line passes,
 
 test('the director sees numbers once a phone has signal, and names only with both codes; two can learn one part', async ({ page, context, browser }) => {
   const progress = {};
-  await fakeWorker(page, { progress });
+  let lagging = false;
+  await fakeWorker(page, { progress, listLags: () => lagging });
   await enrol(page);
   await expect(async () => expect(Object.keys(progress)).toHaveLength(0)).toPass();
   await page.getByRole('button', { name: 'No, start from the beginning' }).click();
@@ -430,13 +431,18 @@ test('the director sees numbers once a phone has signal, and names only with bot
   await expect(page.locator('.staff-list li').filter({ hasText: 'Test Pupil' }).locator('.scene-pcs li').first()).toBeVisible();
   await page.reload();
   await expect(page.getByText(/^2 started,/)).toBeVisible({ timeout: 30000 });
-  // A row left by a mistake goes, after a second tap, and no one else's does.
+  // A row left by a mistake goes, after a second tap, and no one else's does. The worker's list can
+  // still hold it for a minute or so: it stays gone from here, even opened again.
+  lagging = true;
   const sam = page.locator('.staff-list li').filter({ hasText: 'Sam Understudy' });
   await sam.getByRole('button', { name: 'Remove' }).click();
   await expect(page.locator('.staff-list li').filter({ hasText: 'Sam Understudy' })).toHaveCount(1);
   await sam.getByRole('button', { name: 'Remove Sam Understudy from this page?' }).click();
   await expect(page.locator('.staff-list li').filter({ hasText: 'Sam Understudy' })).toHaveCount(0);
   await expect(page.locator('.staff-list li').filter({ hasText: 'Test Pupil' })).toHaveCount(1);
+  await page.reload();
+  await expect(page.locator('.staff-list li').filter({ hasText: 'Test Pupil' })).toHaveCount(1, { timeout: 30000 });
+  await expect(page.locator('.staff-list li').filter({ hasText: 'Sam Understudy' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Remove my codes from this phone' }).click();
   await expect(page.getByLabel('Staff code')).toBeVisible();
 });

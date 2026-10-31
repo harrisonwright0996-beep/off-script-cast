@@ -104,6 +104,25 @@ export function sceneAverages(rows) {
 
 const barOf = (percent) => h('div', { class: 'timebar', role: 'img', 'aria-label': `${percent}% learnt` }, h('div', { class: 'timebar-fill', style: { width: `${percent}%` } }));
 
+// The worker's list can lag behind a removal by a minute or so, so a row just removed stays hidden,
+// even if the page is opened again in that time.
+const GONE = 'off-script-removed';
+const GONE_FOR = 180000;
+const removedNow = () => {
+  try {
+    return Object.fromEntries(Object.entries(JSON.parse(sessionStorage.getItem(GONE)) || {}).filter(([, at]) => Date.now() - at < GONE_FOR));
+  } catch {
+    return {};
+  }
+};
+const hide = (id) => {
+  try {
+    sessionStorage.setItem(GONE, JSON.stringify({ ...removedNow(), [id]: Date.now() }));
+  } catch {
+    // private browsing: the row may show for a moment longer
+  }
+};
+
 function rowView(r, codes) {
   const left = !r.part ? 'No longer on the cast list. ' : sameFirstName(r.name, r.part) ? '' : `On ${r.part}'s lines. `;
   const onWay = r.onWay ? `, ${r.onWay} more on the way` : '';
@@ -121,6 +140,7 @@ function rowView(r, codes) {
         }
         try {
           await staffRemove(codes.staff, r.id);
+          hide(r.id);
           load(codes);
         } catch {
           remove.textContent = 'Could not remove. Check you have signal.';
@@ -170,7 +190,8 @@ const PROBLEMS = {
 async function load(codes, shown = null, keep = keeping()) {
   page('Cast progress', [h('p', { class: 'lead', role: 'status' }, 'Opening…')]);
   try {
-    const rows = await staffNumbers(codes.staff);
+    const removed = removedNow();
+    const rows = (await staffNumbers(codes.staff)).filter((r) => !removed[r.id]);
     const keys = await deriveKeys(cleanCode(codes.company));
     const cast = await openCast(keys);
     const named = await Promise.all(
