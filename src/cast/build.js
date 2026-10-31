@@ -1,5 +1,6 @@
 // One member's pack, from the whole play's model and audio. Used by tools/make-packs.mjs on the
 // laptop and by the browser tests: the part of the job that holds no private data.
+import { sceneKey } from './proof.js';
 import { zipSync, strToU8 } from '../../vendor/fflate.js';
 import { PACK_VERSION } from '../audiopack.js';
 import { noteKey } from '../tape.js';
@@ -40,3 +41,20 @@ export function memberPack(model, member, audio, { coach = {}, notes = {} } = {}
 }
 
 export const castList = (members, version) => strToU8(JSON.stringify({ version, members }));
+
+// How many lines each pack has in each scene, so the director's page can count every part in a scene,
+// started or not. Counts and scene names only. packs: [{ file, model }].
+export function sceneLines(packs) {
+  const names = new Map();
+  const parts = {};
+  for (const { file, model } of packs) {
+    parts[file] = {};
+    for (const sc of model.scenes) {
+      const lines = model.items.filter((it) => it.scene === sc.index).length;
+      if (!lines) continue;
+      names.set(sc.index, sceneKey(sc.heading));
+      parts[file][sceneKey(sc.heading)] = lines;
+    }
+  }
+  return strToU8(JSON.stringify({ scenes: [...names].sort((a, b) => a[0] - b[0]).map(([, key]) => key), parts }));
+}

@@ -34,6 +34,9 @@ const share = (items, getState) => {
 
 export const learntPercent = (model, getState) => share(model.items, getState);
 
+// A scene's short name: 2 for Scene 2, otherwise the start of its heading.
+export const sceneKey = (heading) => /^Scene (\d+)/i.exec(heading)?.[1] ?? heading.split(':')[0].slice(0, 12).replace(/[|=]/g, ' ');
+
 export function sceneLights(model, getState) {
   return model.scenes
     .filter((sc) => sc.itemIds.length)

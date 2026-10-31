@@ -5,7 +5,7 @@ import { buildFixturePack, silentMp3 } from '../tests/fixtures/audio-pack.mjs';
 import { readAudioPack } from '../src/audiopack.js';
 import { COACH } from '../src/coach.js';
 import { noteKey } from '../src/tape.js';
-import { castList, memberPack } from '../src/cast/build.js';
+import { castList, memberPack, sceneLines } from '../src/cast/build.js';
 import { deriveKeys, seal } from '../src/cast/pack.js';
 
 export { expect };
@@ -60,12 +60,15 @@ async function workerFiles() {
   ];
   const files = {};
   const list = [];
+  const packs = [];
   for (const [i, m] of members.entries()) {
     const { sub, zip } = memberPack(model, { name: m.name, ids: m.ids }, audio, { coach, notes });
     files[`p${i}`] = await seal(keys.key, zip);
     list.push({ name: m.name, file: `p${i}`, lines: sub.items.length });
+    packs.push({ file: `p${i}`, model: sub });
   }
   files.cast = await seal(keys.key, castList(list, 'v1'));
+  files['scene-lines'] = await seal(keys.key, sceneLines(packs));
   sealed = { files, keys, list, speaker };
   return sealed;
 }

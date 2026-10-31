@@ -1,7 +1,7 @@
 // The director's page: who has started, and how far they have got. The worker sends numbers under
 // coded names; the cast list, opened here with the company code, turns them into names on this phone.
 import { h, clear, button, plural } from './dom.js';
-import { openCast, staffNumbers, staffRemove } from '../cast/client.js';
+import { openCast, openSceneLines, staffNumbers, staffRemove } from '../cast/client.js';
 import { cleanCode, deriveKeys, openText } from '../cast/pack.js';
 import { dayKey } from '../dates.js';
 
@@ -93,13 +93,23 @@ export function chaseList(rows, today = dayKey(new Date())) {
   return { waiting, chase };
 }
 
-// Each scene across everyone working on it, in the order of the first pupil who has it.
-export function sceneAverages(rows) {
-  const scenes = new Map();
-  for (const r of rows) {
-    for (const { label, percent } of sceneList(r.scenes)) scenes.set(label, [...(scenes.get(label) || []), percent]);
-  }
-  return [...scenes].map(([label, all]) => ({ label, percent: Math.floor(all.reduce((a, b) => a + b, 0) / all.length), pupils: all.length }));
+// Each scene as a share of every line in it, whoever has them: a part not started counts as 0, even
+// with an understudy on it, as it does in the list of who has started. counts: from sceneLines (build.js).
+export function sceneAverages(rows, counts) {
+  if (!counts) return [];
+  const label = (key) => (/^\d+$/.test(key) ? `Scene ${key}` : key);
+  return counts.scenes.map((key) => {
+    let lines = 0;
+    let learnt = 0;
+    for (const [pack, scenes] of Object.entries(counts.parts)) {
+      if (!scenes[key]) continue;
+      const own = rows.filter((r) => r.pack === pack && r.percent !== undefined && r.part && sameFirstName(r.name, r.part));
+      const percents = own.map((r) => (r.scenes ? (sceneList(r.scenes).find((s) => s.label === label(key))?.percent ?? 0) : r.percent));
+      lines += scenes[key];
+      learnt += (scenes[key] * Math.max(0, ...percents)) / 100;
+    }
+    return { label: label(key), percent: lines ? Math.floor((100 * learnt) / lines) : 0 };
+  });
 }
 
 const barOf = (percent) => h('div', { class: 'timebar', role: 'img', 'aria-label': `${percent}% learnt` }, h('div', { class: 'timebar-fill', style: { width: `${percent}%` } }));
@@ -122,6 +132,8 @@ const hide = (id) => {
     // private browsing: the row may show for a moment longer
   }
 };
+
+let sceneCounts = null; // without it the Scenes section stays away: a wrong number is worse than none
 
 function rowView(r, codes) {
   const left = !r.part ? 'No longer on the cast list. ' : sameFirstName(r.name, r.part) ? '' : `On ${r.part}'s lines. `;
@@ -195,6 +207,7 @@ async function load(codes, shown = null, keep = keeping()) {
     const rows = (await staffNumbers(codes.staff)).filter((r) => !removed[r.id]);
     const keys = await deriveKeys(cleanCode(codes.company));
     const cast = await openCast(keys);
+    sceneCounts = await openSceneLines(keys).catch(() => null);
     const named = await Promise.all(
       rows.map(async (r) => ({
         ...r,
@@ -217,7 +230,7 @@ function show(codes, rows, problem = null) {
   const average = Math.floor(rows.reduce((n, r) => n + (r.percent ?? 0), 0) / (rows.length || 1));
   const quiet = rows.filter((r) => isQuiet(r)).length;
   const { waiting, chase } = chaseList(rows);
-  const averages = sceneAverages(rows);
+  const averages = sceneAverages(rows, sceneCounts);
   page('Cast progress', [
     problem ? h('p', { class: 'message', role: 'alert' }, problem) : null,
     h('p', { class: 'lead', role: 'status' }, `${started} started, ${plural(parts, 'part')} not started. ${average}% on average.${quiet ? ` ${quiet} ${quiet === 1 ? 'needs' : 'need'} a word.` : ''}`),
@@ -228,6 +241,7 @@ function show(codes, rows, problem = null) {
     averages.length
       ? h('ul', { class: 'scene-averages' }, averages.map((s) => h('li', {}, h('p', { class: 'staff-name' }, h('strong', {}, s.label), h('span', {}, `${s.percent}%`)), barOf(s.percent))))
       : null,
+    averages.length ? h('p', { class: 'help' }, 'Every line in a scene counts, so a part not started counts as nothing yet.') : null,
     h('h2', {}, 'Everyone'),
     h('ul', { class: 'staff-list' }, rows.map((r) => rowView(r, codes))),
     h('p', { class: 'help' }, 'A line counts once a pupil can still type it on a later day. A phone updates this when it next has signal, so a pupil offline may be further on than this shows.'),

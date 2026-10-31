@@ -427,6 +427,7 @@ test('the director sees numbers once a phone has signal, and names only with bot
   await expect(page.locator('.staff-list li').filter({ hasText: 'Not started' }).first()).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Chase first' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Scenes', exact: true })).toBeVisible();
+  await expect(page.getByText('a part not started counts as nothing yet')).toBeVisible();
   await page.locator('.staff-list li').filter({ hasText: 'Test Pupil' }).getByText('Scene by scene').click();
   await expect(page.locator('.staff-list li').filter({ hasText: 'Test Pupil' }).locator('.scene-pcs li').first()).toBeVisible();
   await page.reload();

@@ -38,6 +38,11 @@ export async function openCast(keys) {
   return JSON.parse(strFromU8(await openFile('cast', keys)));
 }
 
+// How many lines each part has in each scene, for the director's page.
+export async function openSceneLines(keys) {
+  return JSON.parse(strFromU8(await openFile('scene-lines', keys)));
+}
+
 // The company code: the keys, and the list of who is in the cast. The list stays on the phone only
 // until a name is picked.
 export async function unlock(code) {

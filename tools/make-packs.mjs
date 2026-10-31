@@ -22,7 +22,7 @@ import { readAudioPack } from '../src/audiopack.js';
 import { parseMp3 } from '../src/mp3.js';
 import { COACH } from '../src/coach.js';
 import { noteKey, spokenRole } from '../src/tape.js';
-import { castList, memberPack, selfOf } from '../src/cast/build.js';
+import { castList, memberPack, sceneLines, selfOf } from '../src/cast/build.js';
 import { deriveKeys, seal, tokenHash } from '../src/cast/pack.js';
 import { WORDS } from './words.mjs';
 
@@ -109,6 +109,7 @@ export async function main(argv) {
   // Phones fetch their pack again when this changes, so it covers what is spoken here.
   const version = fnv1a(`${model.hash}|${cast.members.map((m) => m.ids.join()).join('|')}|${JSON.stringify(COACH)}|${roles.length}`);
   const list = [];
+  const models = [];
   let total = 0;
   for (const member of cast.members) {
     const { sub, zip } = memberPack(model, member, audio, { coach, notes });
@@ -118,10 +119,12 @@ export async function main(argv) {
     total += sealed.length;
     const name = selfOf(model, member.name) || displayRole(member.name);
     list.push({ name, file, lines: sub.items.length });
+    models.push({ file, model: sub });
     console.log(`Pack ${list.length}: ${sub.items.length} lines, ${(sealed.length / 1e6).toFixed(1)} MB`);
   }
   list.sort((a, b) => a.name.localeCompare(b.name, 'en-GB'));
   await writeFile(join(out, 'files', 'cast'), await seal(keys.key, castList(list, version)));
+  await writeFile(join(out, 'files', 'scene-lines'), await seal(keys.key, sceneLines(models)));
   console.log(`${list.length} packs, ${(total / 1e6).toFixed(1)} MB in all, ${Object.keys(notes).length} stage directions and ${roles.length} roles spoken. Code and files are in the --out folder.`);
 }
 

@@ -9,6 +9,7 @@ import { createTypeCheck, makeResult, sameKey } from '../src/grade.js';
 import { tokenize } from '../src/tokens.js';
 import { newState } from '../src/state.js';
 import { nextNudge } from '../src/cast/reminders.js';
+import { sceneLines } from '../src/cast/build.js';
 import { chaseList, sameFirstName, sceneAverages, sceneList, staffRows } from '../src/ui/staff.js';
 import { sceneLine } from '../src/cast/progress.js';
 import { safariMenu } from '../src/device.js';
@@ -213,7 +214,24 @@ test('a phone sends each scene short, and the director reads it back', () => {
   assert.match(text, /^[^|=]+=\d+(\|[^|=]+=\d+)*$/);
   assert.deepEqual(sceneList('1=40|Prologue=100'), [{ label: 'Scene 1', percent: 40 }, { label: 'Prologue', percent: 100 }]);
   assert.deepEqual(sceneList(undefined), []);
-  assert.deepEqual(sceneAverages([{ scenes: '1=40|2=100' }, { scenes: '1=60' }, {}]), [{ label: 'Scene 1', percent: 50, pupils: 2 }, { label: 'Scene 2', percent: 100, pupils: 1 }]);
+});
+
+test('a scene counts every line in it, so the main part not started holds it down, understudy or not', () => {
+  const counts = { scenes: ['Prologue', '1', '2'], parts: { a: { 1: 10, 2: 80 }, b: { 2: 20, Prologue: 4 }, c: { 1: 10 } } };
+  const row = (pack, name, part, scenes, percent = 50) => ({ pack, name, part, scenes, percent });
+  const rows = [row('b', 'Bea Ray', 'Bea Ray', '2=100|Prologue=50'), row('a', 'Sam Stand', 'Amy Lee', '1=100|2=100'), row('c', 'Cal Fox', 'Cal Fox', undefined, 30)];
+  assert.deepEqual(sceneAverages(rows, counts), [{ label: 'Prologue', percent: 50 }, { label: 'Scene 1', percent: 15 }, { label: 'Scene 2', percent: 20 }]);
+  rows.push(row('a', 'Amy Lee', 'Amy Lee', '1=50|2=50'));
+  assert.deepEqual(sceneAverages(rows, counts).pop(), { label: 'Scene 2', percent: 60 });
+  assert.deepEqual(sceneAverages(rows, null), [], 'no number at all, rather than a wrong one');
+});
+
+test('the counts for the director hold only scene names and numbers, in script order', () => {
+  const made = JSON.parse(new TextDecoder().decode(sceneLines([
+    { file: 'x', model: { scenes: [{ index: 2, heading: 'Scene 2: Night' }, { index: 5, heading: 'Scene 3' }], items: [{ scene: 2 }, { scene: 2 }] } },
+    { file: 'y', model: { scenes: [{ index: 0, heading: 'Prologue: Dawn' }], items: [{ scene: 0 }] } },
+  ])));
+  assert.deepEqual(made, { scenes: ['Prologue', '2'], parts: { x: { 2: 2 }, y: { Prologue: 1 } } });
 });
 
 test('the chase list says who and why, and keeps parts with no one on them in one line', () => {
