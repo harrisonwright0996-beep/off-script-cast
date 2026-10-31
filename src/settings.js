@@ -7,7 +7,7 @@ export const DEFAULT_SETTINGS = {
   proofs: true, // a learned line not yet typed right counts as ready to check
   mode: 'say', // 'type' or 'say'; some cards insist on type whatever this says
   askSpeaker: false, // a pupil knows who they are: the card says which character it is
-  sprintMinutes: 5,
+  sprintMinutes: 20, // a round is 20 minutes of good practice, for everyone (cast/streak.js)
   breakMinutes: 3,
   autoAdvance: false,
   textSize: 100, // percent, 90 to 200
@@ -22,9 +22,6 @@ export const DEFAULT_SETTINGS = {
   runThrough: null, // the last choices on Run through: { scene, which, help }
 };
 
-// A big part left on short rounds never reaches its last lines, so it starts on long ones.
-export const roundMinutes = (lines) => (lines > 60 ? 8 : DEFAULT_SETTINGS.sprintMinutes);
-
 export function withDefaults(saved) {
-  return { ...DEFAULT_SETTINGS, ...(saved || {}) };
+  return { ...DEFAULT_SETTINGS, ...(saved || {}), sprintMinutes: DEFAULT_SETTINGS.sprintMinutes }; // older phones saved a shorter round
 }

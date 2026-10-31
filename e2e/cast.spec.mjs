@@ -35,7 +35,7 @@ test('it opens straight to their lines the next time, and no date or time to spe
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Your lines' })).toBeVisible();
   const text = await page.locator('body').innerText();
-  expect(text).not.toMatch(/minutes|hours|November|December|October|Monday|Tuesday|Wednesday|Thursday|Friday|by then|deadline/i);
+  expect(text.replace(/\d* ?(of 20 )?minutes/g, '')).not.toMatch(/hours|November|December|October|Monday|Tuesday|Wednesday|Thursday|Friday|by then|deadline/i);
   await page.screenshot({ path: `shots/${test.info().project.name}-your-lines.png`, fullPage: true });
 });
 
@@ -382,7 +382,7 @@ test('the director sees numbers once a phone has signal, and names only with bot
   await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
   await expect.poll(() => Object.values(progress).length).toBe(1);
   const [row] = Object.values(progress);
-  expect(Object.keys(row).sort()).toEqual(['fading', 'id', 'lastDay', 'learnt', 'onWay', 'pack', 'percent', 'scenes', 'total', 'who']);
+  expect(Object.keys(row).sort()).toEqual(['fading', 'id', 'lastDay', 'learnt', 'onWay', 'pack', 'percent', 'scenes', 'streak', 'total', 'who']);
   expect(JSON.stringify(row)).not.toContain('Test Pupil');
   expect(JSON.stringify(row)).not.toContain('Prologue'); // the scenes go sealed too
   expect(row.percent).toBe(0);
@@ -457,4 +457,76 @@ test('a phone that unlocked before names were asked for is asked once, and an em
   expect(await page.evaluate(() => window.offScript.store.get('myName'))).toBe('Alex Reed');
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Your lines', exact: true })).toBeVisible();
+});
+
+test.describe('streaks and badges', () => {
+  const ROUND = 1200;
+  const seed = (page, seconds) =>
+    page.evaluate(async ({ seconds }) => {
+      const o = window.offScript;
+      const today = o.today();
+      o.streak.days[today] = seconds;
+      await o.saveStreak();
+    }, { seconds });
+
+  test('Your lines shows what a round is, then how far through it they are, and it survives a reload', async ({ page }) => {
+    await enrol(page);
+    await page.getByRole('button', { name: 'No, start from the beginning' }).click();
+    await expect(page.locator('.streak')).toContainText('A round is 20 minutes of good practice');
+    await seed(page, 8 * 60);
+    await page.reload();
+    await expect(page.locator('.streak')).toContainText('8 of 20 minutes done in this round.');
+    await expect(page.locator('.streak')).toContainText('2 more rounds for bronze today');
+    await page.evaluate(async () => {
+      const o = window.offScript;
+      const day = o.today();
+      for (const [i, n] of [[1, 4], [2, 3], [3, 3]]) o.streak.days[new Date(Date.parse(day) - i * 864e5).toISOString().slice(0, 10)] = n * 1200;
+      o.streak.days[day] = 3.4 * 1200;
+      await o.saveStreak();
+    });
+    await page.reload();
+    await page.locator('.medals').waitFor();
+    await page.screenshot({ path: `shots/${test.info().project.name}-streaks.png`, fullPage: true });
+  });
+
+  test('a round ends only when the 20 minutes are done, and what was won comes once', async ({ page }) => {
+    await enrol(page);
+    await page.getByRole('button', { name: 'No, start from the beginning' }).click();
+    await seed(page, 2 * ROUND - 1);
+    await page.getByRole('button', { name: 'Next round' }).or(page.getByRole('button', { name: 'Start learning' })).click();
+    await page.waitForTimeout(1300);
+    for (let i = 0; i < 40 && (await page.locator('h1').textContent()) !== 'Round done'; i++) await answerCard(page);
+    await expect(page.locator('.reward')).toContainText('Round 2 done today.');
+    await expect(page.locator('.reward')).toContainText('Bronze streak: 1 day.');
+    await page.getByRole('button', { name: 'Back to your lines' }).click();
+    await expect(page.locator('.ring-num')).toBeVisible();
+    await expect(page.locator('.reward')).toHaveCount(0);
+    await expect(page.locator('.streak')).toContainText('1 more round for silver today');
+    await more(page, 'Badges');
+    await expect(page.getByText('1 badge so far.')).toBeVisible();
+    await expect(page.locator('.badge.won')).toContainText('First Round');
+    await expect(page.locator('.badge')).toHaveCount(12);
+    await page.screenshot({ path: `shots/${test.info().project.name}-badges.png`, fullPage: true });
+  });
+
+  test('stopping early keeps the minutes, and the next round picks up from them', async ({ page }) => {
+    await enrol(page);
+    await page.getByRole('button', { name: 'No, start from the beginning' }).click();
+    await seed(page, ROUND - 1);
+    await page.getByRole('button', { name: 'Start learning' }).click();
+    await page.getByRole('button', { name: 'Stop' }).click();
+    await expect(page.locator('.streak')).toContainText('19 of 20 minutes done in this round.');
+    await page.getByRole('button', { name: /Next round|Start learning/ }).click();
+    await page.waitForTimeout(1300);
+    for (let i = 0; i < 40 && (await page.locator('h1').textContent()) !== 'Round done'; i++) await answerCard(page);
+    await expect(page.locator('.reward')).toContainText('First round done today.');
+  });
+
+  test('settings no longer offer a shorter round, and the dashboard row carries the streak', async ({ page }) => {
+    await enrol(page);
+    await page.getByRole('button', { name: 'No, start from the beginning' }).click();
+    await more(page, 'Settings');
+    await expect(page.getByText('Length of a round')).toHaveCount(0);
+    expect(await page.evaluate(() => window.offScript.settings.sprintMinutes)).toBe(20);
+  });
 });

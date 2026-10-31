@@ -26,6 +26,11 @@ export function daysBetween(a, b) {
   return Math.round((utc(b) - utc(a)) / 86400000);
 }
 
+// The Monday of the week a day falls in.
+export function weekStart(key) {
+  return addDays(key, -((new Date(utc(key)).getUTCDay() + 6) % 7));
+}
+
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 

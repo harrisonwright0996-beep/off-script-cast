@@ -109,7 +109,8 @@ function rowView(r, codes) {
   const onWay = r.onWay ? `, ${r.onWay} more on the way` : '';
   const practised = r.lastDay ? `Practised ${whenText(r.lastDay)}.` : 'Opened the app, no practice yet.';
   const heard = r.seen && daysSince(lastHeard(r)) >= 2 ? ` Last heard from ${whenText(lastHeard(r))}.` : '';
-  const said = r.percent === undefined ? 'Not started' : `${left}${r.learnt} of ${plural(r.total, 'line')} learnt${onWay}, ${r.fading} fading. ${practised}${heard}`;
+  const streak = r.streak ? ` On a ${r.streak} day streak.` : '';
+  const said = r.percent === undefined ? 'Not started' : `${left}${r.learnt} of ${plural(r.total, 'line')} learnt${onWay}, ${r.fading} fading. ${practised}${streak}${heard}`;
   let sure = false;
   const remove = r.id
     ? button('Remove', async () => {

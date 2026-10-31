@@ -60,7 +60,7 @@ const savedNudge = `(() => { ${nudge}; return savedNudge(); })()`;
 test('a push after Remove everything uses the plain words and does not make a new database', async ({ page }) => {
   await page.goto('styles.css'); // the same address, with no app open
   expect(await page.evaluate(() => indexedDB.databases())).toEqual([]);
-  expect(await page.evaluate(savedNudge)).toEqual({ title: 'Off Script', body: 'Your lines are ready when you are. Fancy a quick round?' });
+  expect(await page.evaluate(savedNudge)).toEqual({ title: 'Off Script', body: 'Your lines are ready when you are. Fancy a round?' });
   expect(await page.evaluate(() => indexedDB.databases())).toEqual([]);
   // A phone that cannot list its databases falls back on aborting the open. Nothing gets a version.
   await page.evaluate(() => {

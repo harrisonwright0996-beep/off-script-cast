@@ -17,7 +17,9 @@ import { showSettings, wipePhone } from './ui/settings.js';
 import { showWalk } from './ui/walk.js';
 import { showChoose } from './ui/choose.js';
 import { showStartAgain } from './ui/again.js';
+import { showBadges } from './ui/badges.js';
 import { PEEK_GAP, learntPercent } from './cast/proof.js';
+import { addSeconds, cleanStreak, creditFor, noteSlips } from './cast/streak.js';
 import { ENDS } from './cast/config.js';
 
 const EVENT_DAYS = 9; // the plan looks back this far
@@ -30,7 +32,7 @@ async function showEnded(ctx) {
   ctx.root.append(screen({ title: 'Off Script', body: [h('p', { class: 'lead' }, 'The show is over, so your lines have been removed from this phone. Well done.')] }));
 }
 
-const SCREENS = { install: showInstall, unlock: showUnlock, checkin: showCheckin, today: showStage, more: showMore, scene: showScene, sprint: showSprint, scenes: showScenes, reader: showReader, settings: showSettings, walk: showWalk, choose: showChoose, again: showStartAgain, ended: showEnded };
+const SCREENS = { install: showInstall, unlock: showUnlock, checkin: showCheckin, today: showStage, more: showMore, badges: showBadges, scene: showScene, sprint: showSprint, scenes: showScenes, reader: showReader, settings: showSettings, walk: showWalk, choose: showChoose, again: showStartAgain, ended: showEnded };
 
 export function applyLook(s) {
   const root = document.documentElement;
@@ -63,6 +65,7 @@ async function boot() {
     nav: 0,
     fit: { k: 1, n: 0 }, // his forgetting curve factor, refitted when a sprint or walk starts
     peeks: (await store.get('peeks')) || {}, // when each line was last put on show
+    streak: cleanStreak(await store.get('streak')), // minutes practised, badges (cast/streak.js)
 
     // These lines have just been on show, so typing them for a while proves nothing (cast/proof.js).
     peek(ids) {
@@ -112,13 +115,22 @@ async function boot() {
       rec.event.key = await store.saveAnswer(rec.event, rec.state);
       ctx.states.set(rec.state.id, rec.state);
       ctx.events.push(rec.event);
+      rec.credit = creditFor(rec.event, ctx.index.byId.get(rec.event.id)?.words ?? 0);
+      addSeconds(ctx.streak, rec.event.day, rec.credit);
+      noteSlips(ctx.streak, rec.event.prev, rec.state);
+      await ctx.saveStreak();
     },
 
     async undoAnswer(rec) {
       await store.undo(rec.event.key, rec.event.prev);
       ctx.states.set(rec.event.id, rec.event.prev);
       ctx.events = ctx.events.filter((e) => e !== rec.event);
+      addSeconds(ctx.streak, rec.event.day, -(rec.credit || 0));
+      await ctx.saveStreak();
     },
+
+    saveStreak: () => store.set('streak', ctx.streak).catch(() => {}), // never holds up an answer
+    practiceToday: () => ctx.streak.days[ctx.today()] || 0,
 
     // Back to not started: these lines (every line when ids is null) lose their progress and answers.
     async startAgain(ids = null) {

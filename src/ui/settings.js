@@ -16,7 +16,6 @@ const OPTIONS = {
   letterSpacing: [['normal', 'Normal'], ['wide', 'Wide'], ['wider', 'Extra wide']],
   theme: [['stage', 'Stage'], ['cream', 'Cream'], ['light', 'Light'], ['dark', 'Dark'], ['auto', 'Match the phone']],
   mode: [['type', 'Type: first letters on the keypad'], ['say', 'Say: aloud, then tap any misses']],
-  sprintMinutes: [[3, 'Short'], [5, 'Normal'], [8, 'Long']],
   walkGap: [['shorter', 'Shorter'], ['normal', 'Normal'], ['longer', 'Longer']],
   rate: [[0.8, 'Slower'], [0.9, 'A little slower'], [1, 'Normal'], [1.1, 'A little faster'], [1.2, 'Faster']],
 };
@@ -224,7 +223,6 @@ export function showSettings(ctx) {
           { class: 'group' },
           select('mode', 'Answer by', OPTIONS.mode),
           check('autoAdvance', 'Move on by itself after a word perfect answer'),
-          select('sprintMinutes', 'Length of a round', OPTIONS.sprintMinutes),
         ),
         h('h2', {}, 'Reading aloud and Walk'),
         h('div', { class: 'group' }, voiceField(), select('walkGap', 'Time to say each line on a walk', OPTIONS.walkGap)),

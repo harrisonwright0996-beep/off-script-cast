@@ -51,7 +51,7 @@ test('the startup watchdog loads before the app, is cached, and is in syntax any
 
 test('a reminder never names a time to spend', () => {
   const sw = read('sw.js');
-  assert.match(sw, /Fancy a quick round\?/);
+  assert.match(sw, /Fancy a round\?/);
   assert.doesNotMatch(sw, /Two minutes/);
 });
 

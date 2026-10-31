@@ -2,7 +2,7 @@
 // A new version waits until Off Script asks for it (Update now on Today), so nothing reloads in the
 // middle of a sprint. A phone with no lines on it has nothing to interrupt, and no Update now to tap,
 // so it takes a new version at once. Change VERSION with every release.
-const VERSION = 'off-script-cast-13';
+const VERSION = 'off-script-cast-14';
 const FILES = [
   './',
   'styles.css',
@@ -21,6 +21,7 @@ const FILES = [
   'src/cast/proof.js',
   'src/cast/reminders.js',
   'src/cast/science.js',
+  'src/cast/streak.js',
   'src/coach.js',
   'src/device.js',
   'src/backup.js',
@@ -41,6 +42,7 @@ const FILES = [
   'src/tokens.js',
   'src/tts.js',
   'src/ui/again.js',
+  'src/ui/badges.js',
   'src/ui/checkin.js',
   'src/ui/choose.js',
   'src/ui/dom.js',
@@ -98,7 +100,7 @@ self.addEventListener('fetch', (event) => {
 
 // A reminder is an empty push: the words were saved on the phone the last time the app was used, so
 // they never leave it. A push must always show something.
-const DEFAULT_NUDGE = { title: 'Off Script', body: 'Your lines are ready when you are. Fancy a quick round?' };
+const DEFAULT_NUDGE = { title: 'Off Script', body: 'Your lines are ready when you are. Fancy a round?' };
 
 // Whether nothing is saved, as after Remove everything. Safari keeps an empty database even from an
 // aborted open, so look first where the phone can.

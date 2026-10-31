@@ -1,6 +1,7 @@
-// Your lines: how much is learnt, a stage light for each scene, and one obvious next thing. No dates,
-// no time to spend, no streaks: only the % and what to do now.
+// Your lines: how much is learnt, the streaks, a stage light for each scene, and one obvious next
+// thing. No dates: only the %, what has been won and what to do now.
 import { h, clear, screen, button, announce, focusHeading, settled } from './dom.js';
+import { rewardCard, streakBlock } from './badges.js';
 import { crossed, fadingCount, learntPercent, sceneLights } from '../cast/proof.js';
 import { report } from '../cast/progress.js';
 import { sync } from '../cast/reminders.js';
@@ -16,7 +17,7 @@ const MOMENTS = {
   100: 'Every line learnt. Amazing work.',
 };
 const DIPPED = 'Your % dipped because a line slipped. That is normal. Get it right again on another day and it comes back.';
-const AT_ZERO = 'Every line starts here. Your % grows as you learn. A few short rounds a day works best.';
+const AT_ZERO = 'Every line starts here. Your % grows as you learn. Several rounds a day works best.';
 const ON_WAY = 'Your lines are on their way. Each one counts towards your % once you can still do it on another day.';
 
 export function lightsOf(lights, open) {
@@ -54,10 +55,11 @@ export function showMore(ctx) {
         h(
           'ul',
           { class: 'scene-list' },
-          plan.done ? null : entry('Quick round', 'Two minutes, when you have no time for more.', () => ctx.go('sprint', { scope: plan.tests.length ? 'tests' : 'all', minutes: 2 })),
+          plan.done ? null : entry('Quick go', 'Two minutes, when you have no time for more. It adds to your next round.', () => ctx.go('sprint', { scope: plan.tests.length ? 'tests' : 'all', minutes: 2 })),
           runIsMain(plan) ? null : entry('Run through', 'What you know so far, in script order.', () => ctx.go('choose', { run: true })),
           entry('Choose', 'Pick a scene and how much help you want.', () => ctx.go('choose')),
           entry('Read my lines', 'Read a scene, or hear it read aloud.', () => ctx.go('scenes')),
+          entry('Badges', 'What you have won, and what is still to win.', () => ctx.go('badges')),
           entry('Settings', 'Text size, colours, reminders and your name.', () => ctx.go('settings')),
         ),
       ],
@@ -112,6 +114,7 @@ export function showStage(ctx) {
     const moment = [milestone ? `${milestone}%. ${MOMENTS[milestone]}` : null, litWords].filter(Boolean).join(' ');
     if (moment) body.push(h('div', { class: 'moment', role: 'status' }, milestone ? [h('p', { class: 'moment-big' }, `${milestone}%`), h('p', {}, MOMENTS[milestone])] : null, lit ? h('p', {}, litWords) : null));
 
+    const rewardAt = body.length;
     const ring = h('div', { class: 'ring', role: 'img', 'aria-label': `${percent}% learnt` }, h('span', { class: 'ring-num', 'aria-hidden': 'true' }, `${percent}%`), h('span', { class: 'ring-word', 'aria-hidden': 'true' }, 'learnt'));
     ring.style.setProperty('--pc', String(percent));
     body.push(ring);
@@ -122,7 +125,9 @@ export function showStage(ctx) {
 
     if (fading) body.push(h('p', { class: 'fading' }, 'Some lines are ready for another go.'));
     else if (percent >= 100) body.push(h('p', { class: 'fading' }, 'You know every line. Keep them: lines fade if you stop using them.'));
-    else if (plan.done) body.push(h('p', { class: 'fading' }, 'All caught up for now. Have a break, then come back for another round: a few short rounds a day is what works.'));
+    else if (plan.done) body.push(h('p', { class: 'fading' }, 'All caught up for now. Have a break, then come back for another round: several rounds a day, spread out, is what works.'));
+
+    body.push(streakBlock(ctx));
 
     // Above the scenes, where it is seen without scrolling.
     body.push(await reminderOffer(ctx));
@@ -135,6 +140,7 @@ export function showStage(ctx) {
         : button(started ? 'Next round' : 'Start learning', () => ctx.go('sprint'), { class: 'btn primary' });
     const footer = [main, h('div', { class: 'row' }, button('Walk', () => ctx.go('walk')), button('More', () => ctx.go('more')))];
     if (ctx.nav !== nav) return; // they have moved on while this was drawing
+    body.splice(rewardAt, 0, rewardCard(ctx));
     clear(ctx.root).append(screen({ title: 'Your lines', body, footer, className: 'today' }));
     // Marked now it is on show, not before: only what was shown counts as seen.
     if (percent !== seen.percent || percent > best || lit) await ctx.store.set('seen', { ...seen, percent, best: Math.max(best, percent), lit: lit ? [...seen.lit, lit.scene] : seen.lit });

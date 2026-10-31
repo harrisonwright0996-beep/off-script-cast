@@ -282,7 +282,7 @@ test('the words fit why the nudge comes: new lines with nothing fading never say
   assert.equal(nudgeWhy(args()), 'fading'); // every line learnt: only fading is left to bring them back
   assert.match(nudgeText({ percent: 100, turn: 0, why: 'fading' }).body, /keeps them fresh/);
   const fading = [0, 1, 2, 3].map((turn) => nudgeText({ percent: 40, turn, why: 'fading' }).body);
-  assert.ok(fading.includes('One quick round now does more than a long one later.'));
+  assert.ok(fading.includes('A few minutes now does more than a long go later.'));
   assert.ok(fading.includes('Lines you have started are slipping a little. Catch them now and they last longer.'));
 });
 

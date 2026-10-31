@@ -70,7 +70,7 @@ const CHECKS = {
   lastNewDay: isDay,
   showDay: isDay,
   mode: oneOf('type', 'say'),
-  sprintMinutes: inRange(1, 60),
+  sprintMinutes: (n) => n === DEFAULT_SETTINGS.sprintMinutes, // a backup from when rounds were shorter
   breakMinutes: inRange(1, 60),
   textSize: inRange(90, 200),
   lineSpacing: inRange(1, 3),

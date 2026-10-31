@@ -397,7 +397,7 @@ test('Reveal puts the line on show, so a said card cannot change to typing', asy
   await expect(page.getByRole('button', { name: 'Type it instead' })).toHaveCount(0);
 });
 
-test('a Quick round after a stopped long round has its own time', async ({ page }) => {
+test('a Quick go after a stopped long round has its own time', async ({ page }) => {
   await enrol(page);
   await page.getByRole('button', { name: 'No, start from the beginning' }).click();
   await page.getByRole('button', { name: 'Start learning' }).click();
@@ -411,7 +411,7 @@ test('a Quick round after a stopped long round has its own time', async ({ page 
     const s = await o.store.get('sprint');
     await o.store.set('sprint', { ...s, elapsed: 130000 });
   });
-  await more(page, 'Quick round');
+  await more(page, 'Quick go');
   await expect(page.locator('.cue')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Keep going?' })).toHaveCount(0);
 });

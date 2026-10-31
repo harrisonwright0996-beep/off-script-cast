@@ -60,16 +60,16 @@ export function nudgeWhy(args) {
 
 const WORDS = {
   learning: [
-    'Your lines are starting to fade. A quick round now will bring them back.',
-    'One quick round now does more than a long one later.',
-    'Your brain is ready for another go. Just a quick round?',
+    'Your lines are starting to fade. A few minutes now will bring them back.',
+    'A few minutes now does more than a long go later.',
+    'Your brain is ready for another go. Just a few minutes?',
     'Lines you have started are slipping a little. Catch them now and they last longer.',
   ],
-  new: ['Your lines are ready when you are. Fancy a quick round?', 'Time for another round? A few short ones a day is what works.'],
+  new: ['Your lines are ready when you are. Fancy a round?', 'Time for another round? Several a day is what works.'],
   learnt: [
-    'You know your lines. A quick round keeps them fresh.',
-    'Lines you know still fade if you leave them. A quick round keeps them safe.',
-    'Knowing it once is not the same as keeping it. A quick round keeps it.',
+    'You know your lines. A few minutes keeps them fresh.',
+    'Lines you know still fade if you leave them. A few minutes keeps them safe.',
+    'Knowing it once is not the same as keeping it. A few minutes keeps it.',
   ],
 };
 

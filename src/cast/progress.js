@@ -5,6 +5,7 @@
 import { post } from './client.js';
 import { sealText } from './pack.js';
 import { fadingCount, isLearnt, learntPercent, onWayCount, sceneLights } from './proof.js';
+import { streakDays } from './streak.js';
 
 const ROW = 'progressId';
 const SCENES_MOST = 480; // sealed: a row has to fit in the worker's 1,024 bytes
@@ -25,6 +26,7 @@ export function progressOf(ctx) {
     fading: fadingCount(ctx.plan().ready, ctx.getState),
     onWay: onWayCount(ctx.model, ctx.getState),
     scenes: sceneLine(ctx.model, ctx.getState),
+    streak: streakDays(ctx.streak, ctx.today()),
     lastDay: days.length ? days[days.length - 1] : null,
   };
 }

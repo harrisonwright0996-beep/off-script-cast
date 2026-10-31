@@ -3,7 +3,6 @@ import { h, clear, screen, button, focusHeading, plural, settled } from './dom.j
 import { CastError, fetchPack, openCast, unlock } from '../cast/client.js';
 import { cleanCode } from '../cast/pack.js';
 import { askToPersist } from '../store.js';
-import { roundMinutes } from '../settings.js';
 
 const PROBLEMS = {
   'wrong-code': 'That code is not right. Check it and try again.',
@@ -101,7 +100,6 @@ export function showUnlock(ctx) {
       ctx.member = { name: member.name, file: member.file, version: cast.version };
       ctx.manifest = manifest;
       await ctx.setModel(model, { importedAt: Date.now() });
-      await ctx.saveSettings({ sprintMinutes: roundMinutes(model.items.length) });
       await askToPersist();
       ctx.go('checkin', { intro: true });
     } catch (err) {
@@ -128,7 +126,7 @@ export function showUnlock(ctx) {
 }
 
 // What goes off the phone, said before a name is picked and in Settings.
-export const SEEN = 'Your director can see your name, whose lines you are learning, how much you have learnt in each scene, how many lines are fading and when you last practised.';
+export const SEEN = 'Your director can see your name, whose lines you are learning, how much you have learnt in each scene, how many lines are fading, your streak and when you last practised.';
 
 // The pupil's own name, typed: an understudy picks the part they are learning, so the part alone does
 // not say who this is. Sealed before it leaves the phone. Asked once, and of a phone that has none yet.

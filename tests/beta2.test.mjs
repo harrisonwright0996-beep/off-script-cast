@@ -12,7 +12,6 @@ import { nextNudge } from '../src/cast/reminders.js';
 import { chaseList, sameFirstName, sceneAverages, sceneList, staffRows } from '../src/ui/staff.js';
 import { sceneLine } from '../src/cast/progress.js';
 import { safariMenu } from '../src/device.js';
-import { roundMinutes } from '../src/settings.js';
 import { handle, tick } from '../worker/index.js';
 import { tokenHash } from '../src/cast/pack.js';
 
@@ -188,9 +187,13 @@ test('after the show nothing is sent and what is left goes', async () => {
   assert.equal(e.KV.m.size, 0);
 });
 
-test('a big part starts on long rounds, a small one on normal rounds', () => {
-  assert.equal(roundMinutes(60), 5);
-  assert.equal(roundMinutes(61), 8);
+test('the worker keeps a streak of the right kind, and a row from an older phone needs none', async () => {
+  const e = await worker();
+  assert.equal((await send(e, '/progress', { ...ROW, streak: 5 })).status, 204);
+  assert.match(JSON.stringify([...e.KV.m.entries()]), /streak.{0,4}5/);
+  assert.equal((await send(e, '/progress/off', { id: ROW.id })).status, 204);
+  assert.equal((await send(e, '/progress', { ...ROW, id: 'e'.repeat(32), streak: 'lots' })).status, 204);
+  assert.doesNotMatch(JSON.stringify([...e.KV.m.entries()]), /streak/);
 });
 
 test('with lines still to learn, the next reminder comes later the same day, and never late at night', () => {

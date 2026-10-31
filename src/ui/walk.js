@@ -3,6 +3,8 @@
 // heard as missed, and back replays it. Without a pack the phone's own voice reads the same tape with
 // the screen kept on, and two big buttons do the marking. Afterwards he checks the list, and the
 // results are saved at the moments they were heard.
+import { rewardCard, roundMinutesLine } from './badges.js';
+import { WALK_COUNTS } from '../cast/streak.js';
 import { h, clear, screen, button, announce, focusHeading, plural, settled } from './dom.js';
 import { buildWalk, markTrial, markedLines, noteKey, partAt, replayPoint, resumePoint, reviewRows, spokenRole, walkResults, walkRecords } from '../tape.js';
 import { sync } from '../cast/reminders.js';
@@ -438,13 +440,14 @@ export function showWalk(ctx) {
           });
           const records = walkRecords(results, { start, getState: ctx.getState, k: plan.k });
           for (const rec of records) await ctx.saveAnswer(rec);
+          if (records.reduce((n, r) => n + (r.event.active || 0), 0) >= WALK_COUNTS) ctx.streak.walks += 1;
           await kept;
           await ctx.store.del(DRAFT);
           ctx.refit();
           sync(ctx);
           const missed = rows.filter((r) => r.ticked).length;
           announce('Walk saved');
-          page('Walk saved', [h('p', { class: 'lead' }, `${plural(rows.length, 'line')} practised${missed ? `, ${missed} to look at again` : ''}. Your practice counts when you next type them.`)], [
+          page('Walk saved', [rewardCard(ctx), roundMinutesLine(ctx), h('p', { class: 'lead' }, `${plural(rows.length, 'line')} practised${missed ? `, ${missed} to look at again` : ''}. Your practice counts when you next type them.`)], [
             button(`Another ${length} minutes`, settled(() => build(length)), { class: 'btn primary' }),
             button('A different length', settled(choose)),
             button('Back to my lines', settled(() => ctx.go('today'))),

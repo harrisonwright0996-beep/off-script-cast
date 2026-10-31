@@ -8,6 +8,7 @@ import { createSession, linesLeft } from '../session.js';
 import { createTypeCheck, onlySlip, sayMisses, makeResult, describeResult, repeatMisses, troubleNote } from '../grade.js';
 import { blankOf, firstLettersOf, gapsOf, lettersShown } from '../tokens.js';
 import { canSpeak, speak, stopSpeaking } from '../tts.js';
+import { rewardCard, roundMinutesLine } from './badges.js';
 import { hearCue } from './hearcue.js';
 import { keypad, TYPE_HINT } from './keypad.js';
 import { reminderOffer } from './offer.js';
@@ -15,7 +16,7 @@ import { sync } from '../cast/reminders.js';
 import { scienceNote } from '../cast/science.js';
 
 const SAVED = 'sprint';
-const AGAIN = 'Come back for another round later today. A few short rounds a day is what makes lines stick.';
+const AGAIN = 'Come back for another round later today. Several rounds a day, spread out, is what makes lines stick.';
 export const PRACTICE = 'practice'; // a chosen practice, saved apart from the day's sprint
 const IDLE_CAP = 150000; // a longer pause between taps was a break: it is not counted as sprint time
 const AUTO_ADVANCE_MS = 1200;
@@ -100,14 +101,16 @@ const comesBack = (rec) => (rec.back ? 'Once more, with a little more help.' : r
 // A go with help on it, right.
 const RIGHT_WITH = { gaps: 'Right with the gaps', help: 'Right with the first letters' };
 
-// scope: 'all' or 'tests' (Just 2 minutes). minutes: the sprint length (settings by default).
+// scope: 'all' or 'tests' (Just 2 minutes). minutes: a Quick go's length. Otherwise a round ends as the
+// day's good practice reaches a whole round, so minutes done in an earlier sitting are kept.
 // custom: { scene, itemIds } for Run this scene. extra: 'new' or 'runs' to keep going after the plan.
 // practice: a chosen practice ({ scene, which, help, itemIds, title, run }; run: a Run through), or
 // 'resume' to carry on the one saved.
 export async function showSprint(ctx, { scope = 'all', minutes = null, custom = null, extra = null, practice = null } = {}) {
   const today = ctx.today();
-  const length = (minutes ?? ctx.settings.sprintMinutes) * 60000;
-  const short = minutes != null && minutes <= 2;
+  const short = minutes != null;
+  const perRound = ctx.settings.sprintMinutes * 60;
+  const roundEnd = (Math.floor(ctx.practiceToday() / perRound) + 1) * perRound;
   const key = practice ? PRACTICE : SAVED;
   const resumable = !!practice || (scope === 'all' && !custom);
   const fresh = !!practice && practice !== 'resume'; // a new chosen practice starts afresh
@@ -151,7 +154,7 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     if (document.visibilityState === 'visible') elapsed += Math.min(now - last, IDLE_CAP);
     last = now;
   };
-  const timeUp = () => elapsed >= length;
+  const timeUp = () => (short ? elapsed >= minutes * 60000 : ctx.practiceToday() >= roundEnd);
 
   let answeredAt = elapsed; // the sprint clock at the last answer
   let hiddenAt = 0; // when the app last went into the background
@@ -531,7 +534,7 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
 
   function plain(title, body, footer) {
     quiet();
-    clear(ctx.root).append(screen({ title, back: act(stop), backLabel: 'Your lines', body, footer }));
+    clear(ctx.root).append(screen({ title, back: act(stop), backLabel: 'Your lines', body: [rewardCard(ctx), ...body, roundMinutesLine(ctx)], footer }));
     focusHeading(ctx.root);
   }
 
