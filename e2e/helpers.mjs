@@ -183,7 +183,10 @@ export async function answerCard(page, { miss = false } = {}) {
   });
   if (card.step === 'test') await page.getByRole('button', { name: 'Teach me' }).click();
   else if (card.step === 'front') await page.getByRole('button', { name: 'Next', exact: true }).click();
-  else {
+  else if (card.step === 'cue') {
+    await page.locator('.cue-option').nth(await page.evaluate(() => window.offScript.card.right)).click();
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
+  } else {
     const say = async () => {
       await page.getByRole('button', { name: 'Reveal' }).click();
       if (miss) await page.getByRole('group', { name: 'Tap any word you missed or changed' }).getByRole('button').first().click();

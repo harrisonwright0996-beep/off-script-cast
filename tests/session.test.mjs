@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fakeApp, learn } from './helpers.mjs';
+import { fakeApp, fixtureModel, learn } from './helpers.mjs';
+import { memberModel } from '../src/cast/subset.js';
 import { createSession, linesLeft, TEACH_FIRST_MESSAGE, AHEAD_MESSAGE, EXTRA_RUN_MESSAGE, AGAIN_MESSAGE, CLOSING_MESSAGE, LETTERS_MESSAGE, SHUFFLE_MESSAGE, LADDER_MESSAGE, GAP, POOL, CHECK_EVERY, LONG, BACKS, rungsOf } from '../src/session.js';
 import { makeResult } from '../src/grade.js';
 import { isLearnt, learntPercent } from '../src/cast/proof.js';
@@ -1037,4 +1038,109 @@ test('a line of 8 words or more passes with one word wrong, counts, and grows le
   assert.equal(makeResult({ misses: [3, 4], mode: 'type', words: 12 }).pass, false);
   assert.equal(makeResult({ misses: [3], speakerWrong: true, mode: 'type', words: 12 }).pass, false);
   assert.equal(makeResult({ misses: [3], mode: 'type' }).pass, false, 'a first wrong key, not yet finished, is a miss');
+});
+
+// A pupil's script: every other line, so that lines have cues from someone else.
+function pupil({ settings = {} } = {}) {
+  const { model } = fixtureModel();
+  const ids = model.items.filter((_, i) => i % 2).map((it) => it.id);
+  return { app: fakeApp({ settings: { cueEvery: 2, ...settings }, script: memberModel(model, ids) }), ids };
+}
+
+// Answers everything right until a cue card comes, or `max` cards go by.
+function untilCue(app, s, max = 200) {
+  let card = s.card || s.advance();
+  for (let i = 0; card && i < max; i++) {
+    if (card.step === 'cue') return card;
+    if (card.step === 'test') card = s.choose('try');
+    else if (card.step === 'front') card = s.choose('next');
+    else {
+      answer(app, s, true);
+      card = s.advance();
+    }
+  }
+  return null;
+}
+
+test('a cue card asks about a line already right in this round, with its cue among the choices, and changes nothing', () => {
+  const { app } = pupil();
+  const s = start(app);
+  const c = untilCue(app, s);
+  assert.ok(c, 'one comes up');
+  assert.equal(c.choices.length, 3);
+  assert.equal(c.choices[c.right], c.item.cue.text);
+  assert.equal(s.state.lines[c.item.id].need, 'done');
+  const before = JSON.stringify(app.getState(c.item.id));
+  const goes = s.state.goes;
+  assert.deepEqual(s.cueAnswer(true), { later: false });
+  assert.equal(JSON.stringify(app.getState(c.item.id)), before);
+  assert.equal(s.state.goes, goes, 'it does not take the place of a go at a line');
+  assert.notEqual(s.advance()?.step, 'cue', 'never two in a row');
+});
+
+test('cue cards come about every so many answers, and a line right is not asked again that round', () => {
+  const { app } = pupil({ settings: { cueEvery: 6 } });
+  const s = start(app);
+  const asked = [];
+  let answers = 0;
+  let card = s.advance();
+  for (let i = 0; card && i < 300; i++) {
+    if (card.step === 'cue') {
+      asked.push(card.item.id);
+      assert.ok(answers >= 6, 'not before its turn');
+      answers = 0;
+      s.cueAnswer(true);
+      card = s.advance();
+    } else if (card.step === 'test') card = s.choose('try');
+    else if (card.step === 'front') card = s.choose('next');
+    else {
+      answer(app, s, true);
+      answers += 1;
+      card = s.advance();
+    }
+  }
+  assert.ok(asked.length > 1);
+  assert.equal(new Set(asked).size, asked.length);
+});
+
+test('a cue missed comes back once, and only once', () => {
+  const { app } = pupil();
+  const s = start(app);
+  const first = untilCue(app, s);
+  assert.deepEqual(s.cueAnswer(false), { later: true });
+  s.advance();
+  const second = untilCue(app, s);
+  assert.equal(second.item.id, first.item.id);
+  assert.deepEqual(s.cueAnswer(false), { later: false });
+  s.advance();
+  const third = untilCue(app, s);
+  if (third) assert.notEqual(third.item.id, first.item.id);
+});
+
+test('no cue card in a chosen practice or once time is up', () => {
+  const { app, ids } = pupil();
+  const custom = { scene: 0, itemIds: ids.slice(0, 12), help: 'cue' };
+  assert.equal(untilCue(app, start(app, { custom })), null);
+  const s = start(app);
+  untilCue(app, s);
+  s.close();
+  assert.equal(s.advance()?.step === 'cue', false, 'the card on show goes');
+  assert.equal(untilCue(app, s), null);
+});
+
+test('a cue card comes after a scene run, not in the middle of one', () => {
+  const { app } = pupil();
+  const s = start(app);
+  const c = untilCue(app, s);
+  assert.equal(s.inScene, false);
+  assert.ok(c);
+});
+
+test('a round closed and carried on keeps its cue card as it was', () => {
+  const { app } = pupil();
+  const s = start(app);
+  const c = untilCue(app, s);
+  const back = start(app, { saved: s.save() });
+  assert.equal(back.card.step, 'cue');
+  assert.deepEqual([back.card.item.id, back.card.choices, back.card.right], [c.item.id, c.choices, c.right]);
 });

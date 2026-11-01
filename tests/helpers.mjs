@@ -11,7 +11,7 @@ import { HOUR } from '../src/memory.js';
 import { DEFAULT_SETTINGS } from '../src/settings.js';
 
 // The engine's tests were written for these settings, whatever the app's defaults are.
-export const TEST_SETTINGS = { ...DEFAULT_SETTINGS, deadline: '2026-11-04', lastNewDay: '2026-11-01', proofs: false, mode: 'type', askSpeaker: true, sprintMinutes: 12, theme: 'cream' };
+export const TEST_SETTINGS = { ...DEFAULT_SETTINGS, deadline: '2026-11-04', lastNewDay: '2026-11-01', proofs: false, mode: 'type', askSpeaker: true, sprintMinutes: 12, theme: 'cream', cueEvery: Infinity };
 
 export function fixtureModel() {
   const model = buildModel(parseScript(readDocxParagraphs(buildFixtureDocx())));
@@ -43,8 +43,8 @@ export function learn(app, ids, { stability = 24, hoursAgo = 24, ...extra } = {}
   }
 }
 
-export function fakeApp({ settings = {}, today = '2026-10-26', hour = 12, step = 10000 } = {}) {
-  const { model, index } = fixtureModel();
+export function fakeApp({ settings = {}, today = '2026-10-26', hour = 12, step = 10000, script = null } = {}) {
+  const { model, index } = script ? { model: script, index: indexModel(script) } : fixtureModel();
   const states = new Map();
   const events = [];
   const app = {

@@ -554,6 +554,21 @@ h1:focus-visible {
   border-style: dashed;
 }
 
+/* A cue question: three lines to choose from */
+.cue-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  margin: 0.25em 0 1em;
+}
+.cue-option {
+  justify-content: flex-start;
+  height: auto;
+  padding-block: 0.75em;
+  text-align: left;
+  white-space: normal;
+}
+
 /* Say mode: tap the words missed */
 .words {
   display: flex;

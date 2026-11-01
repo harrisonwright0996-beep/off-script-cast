@@ -325,4 +325,32 @@ export function speakerChoices(model, item, count = 6, byId = indexModel(model).
   return picked.sort((a, b) => a.localeCompare(b, 'en-GB'));
 }
 
+// A question the other way round: a cast member's line, and which of three lines comes just before it.
+// Their own lines' cues are the only other people's words on the phone, and the ones most easily mixed
+// up: the wrong answers come from those nearest in the play, the same scene first. The cue of another
+// copy of the same line is right as well, so it is left out. turn: shakes up which are used and in
+// what order, the same every time for the same turn. Returns { options, right }, or null for a line
+// with no cue from someone else (the start of a scene, or straight after their own line) or too few
+// wrong answers.
+export function cueChoices(model, item, turn = 0, count = 3) {
+  const places = new Set(model.items.map((it) => it.index));
+  const cued = (it) => it.cue.speaker !== null && !places.has(it.index - 1);
+  if (!cued(item)) return null;
+  const said = (it) => `${it.speaker}|${flat(it.text)}`;
+  const taken = new Set(model.items.filter((it) => said(it) === said(item)).map((it) => flat(it.cue.text)));
+  const shake = (text) => fnv1a(`${turn}:${text}`);
+  const near = (it) => (it.scene === item.scene ? 0 : 1e6) + Math.abs(it.index - item.index);
+  const wrong = [];
+  for (const it of model.items.filter(cued).sort((a, b) => near(a) - near(b))) {
+    if (taken.has(flat(it.cue.text))) continue;
+    taken.add(flat(it.cue.text));
+    wrong.push(it.cue.text);
+  }
+  if (wrong.length < count - 1) return null;
+  const right = item.cue.text;
+  const byShake = (a, b) => (shake(a) < shake(b) ? -1 : 1);
+  const options = [right, ...wrong.slice(0, count * 2).sort(byShake).slice(0, count - 1)].sort(byShake);
+  return { options, right: options.indexOf(right) };
+}
+
 export { displayTitle };

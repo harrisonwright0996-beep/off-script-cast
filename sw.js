@@ -3,7 +3,7 @@
 // does not disturb a round or a walk: an open page keeps what it has loaded, and starts again by itself
 // as soon as nothing is under way (app.js, stage.js). A page with no lines has nothing to interrupt, so
 // it is sent to the new version at once. Change VERSION with every release.
-const VERSION = 'off-script-cast-19';
+const VERSION = 'off-script-cast-20';
 // Pages from before version 17 may not start again by themselves, so this one sends them, unless a
 // walk is under way: the page would stop its audio. A round loses nothing: each answer is saved.
 const LAST_STUCK = 16;

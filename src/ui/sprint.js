@@ -3,6 +3,7 @@
 // and so is the sprint, so closing the app loses nothing. Time is a slim bar that only moves when he
 // does something; at time up nothing new comes, only the lines still to finish, then Sprint done. A
 // scene being run goes on to its end first, except in a Quick go, which keeps to its time.
+// Now and then a cue question: a line and three lines to choose from, which comes just before it.
 import { h, clear, screen, button, announce, focusHeading, num, plural, drawn, settled } from './dom.js';
 import { gainLine, isLearnt, learntPercent } from '../cast/proof.js';
 import { createSession } from '../session.js';
@@ -15,6 +16,7 @@ import { keypad, TYPE_HINT } from './keypad.js';
 import { reminderOffer } from './offer.js';
 import { sync } from '../cast/reminders.js';
 import { scienceNote } from '../cast/science.js';
+import { addSeconds, CUE_MOST } from '../cast/streak.js';
 
 const SAVED = 'sprint';
 const AGAIN = 'Come back for another round later today. Several rounds a day, spread out, is what makes lines stick.';
@@ -230,6 +232,7 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
         [button('Next', act(() => choose('next')), { class: 'btn primary' }), readAloud(c.item.text)].filter(Boolean),
       );
     } else if (c.step === 'help' || c.step === 'gaps') helpCard(c);
+    else if (c.step === 'cue') cueCard(c);
     else floor(c);
     if (focus) focusHeading(ctx.root);
   }
@@ -404,6 +407,36 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
       };
       sayCheck(tokens, answerArea, footBox, 'Say it aloud, then reveal it.', (misses, ms) => finish(c, makeResult({ misses, speakerWrong, mode: 'say', ms, words: c.tested ? item.words : 0 })), onReveal);
     }
+  }
+
+  // A cue question: the whole line is on show, and three lines to choose from. Nothing about the line
+  // changes, whichever is chosen. Only the time counts, towards the round.
+  function cueCard(c) {
+    const yours = () => [h('p', { class: 'speaker' }, c.item.speaker), h('p', { class: 'line' }, tokenView(c.item.tokens))];
+    ctx.peek([c.item.id]);
+    undo.length = 0; // the answer before is behind this card now
+    const choose = (i) => {
+      tick();
+      const right = i === c.right;
+      const seconds = Math.min(activeSeconds(), CUE_MOST);
+      answeredAt = elapsed;
+      addSeconds(ctx.streak, ctx.today(), seconds);
+      ctx.saveStreak();
+      const { later } = session.cueAnswer(right);
+      saveSprint();
+      const text = right ? 'Right, that is your cue' : 'Not that one. This is your cue';
+      const note = later ? 'This one comes back later.' : null;
+      announce([`${text}.`, note].filter(Boolean).join(' '));
+      const block = h('p', { id: 'result', class: `result ${right ? 'perfect' : 'misses'}` }, h('span', { class: 'icon', 'aria-hidden': 'true' }, right ? '✓' : '✕'), h('span', {}, text));
+      const nextButton = button('Next', act(next), { class: 'btn primary' });
+      nextButton.setAttribute('aria-describedby', ['result', note && 'result-note'].filter(Boolean).join(' '));
+      frame({ ...c, message: null }, [block, cueBlock(c.cue, hearCue(ctx, c.item, c.cue)), ...yours(), note ? h('p', { id: 'result-note', class: 'help' }, note) : null], [nextButton]);
+      ctx.root.querySelector('footer .btn').focus({ preventScroll: true });
+      if (right && ctx.settings.autoAdvance) autoTimer = setTimeout(next, AUTO_ADVANCE_MS);
+    };
+    const options = h('div', { class: 'cue-options', role: 'group', 'aria-labelledby': 'cue-question' });
+    c.choices.forEach((text, i) => options.append(button(text, act(() => choose(i)), { class: 'btn cue-option' })));
+    frame(c, [...yours(), h('p', { class: 'prompt', id: 'cue-question' }, 'Which line comes just before yours?'), options], []);
   }
 
   // Seconds on the cards since the answer before.

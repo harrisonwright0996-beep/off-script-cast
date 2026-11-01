@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fixtureModel } from './helpers.mjs';
-import { buildModel, chunkSpeech, cueOf, cueTail, CUE_LINES, displayRole, indexModel, speakerChoices, spineItemIds, uniqueCues } from '../src/items.js';
+import { buildModel, chunkSpeech, cueOf, cueTail, CUE_LINES, displayRole, indexModel, speakerChoices, cueChoices, spineItemIds, uniqueCues } from '../src/items.js';
 import { parseScript } from '../src/parse.js';
 import { readDocxParagraphs } from '../src/docx.js';
 import { buildFixtureDocx, fixtureXml, LONG_SPEECH } from './fixtures/night-ferry.mjs';
@@ -149,4 +149,47 @@ test('the same words from a different speaker are a different line: the cue is m
   assert.deepEqual([...cues.keys()], [benYes.id, carlYes.id], 'who speaks next has one right answer too');
   assert.deepEqual(cues.get(benYes.id).lead, [first.id]);
   assert.deepEqual(cues.get(carlYes.id).lead, [second.id]);
+});
+
+// A pupil's script: every other line of the play, so each has a cue from someone else.
+const everyOther = (model, from = 0) => ({ ...model, items: model.items.filter((_, i) => i % 2 === from % 2) });
+
+test('a cue question has three different cues, the real one among them, in an order that gives nothing away', () => {
+  const { model } = fixtureModel();
+  const own = everyOther(model, 1);
+  const item = own.items[3];
+  const q = cueChoices(own, item, 'a');
+  assert.equal(q.options.length, 3);
+  assert.equal(new Set(q.options).size, 3);
+  assert.equal(q.options[q.right], item.cue.text);
+  const places = new Set();
+  for (let turn = 0; turn < 40; turn++) places.add(cueChoices(own, item, turn).right);
+  assert.ok(places.size > 1, 'the right answer moves about');
+  assert.deepEqual(cueChoices(own, item, 'a'), q, 'the same each time, so a card carried on later is the same card');
+});
+
+test('a cue question takes its wrong answers from the cues nearest in the same scene', () => {
+  const item = (index, scene) => ({ id: `i${index}`, index, scene, speaker: 'A', text: `line ${index}`, cue: { speaker: 'B', text: `Cue ${index}.`, notes: [] } });
+  const items = [...Array(12).keys()].map((i) => item(i * 2 + 1, 0)).concat([31, 33, 35].map((n) => item(n, 1)));
+  const nearest = new Set([1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21].map((n) => `Cue ${n}.`));
+  for (let turn = 0; turn < 30; turn++) assert.ok(cueChoices({ items }, items[5], turn).options.every((o) => nearest.has(o)));
+});
+
+test('no cue question for a line with no cue from someone else, or with too few wrong answers', () => {
+  const { model } = fixtureModel();
+  const own = everyOther(model, 1);
+  assert.equal(cueChoices(model, model.items[1], 'a'), null, 'straight after their own line');
+  const opening = { ...model, items: [model.items[0], ...model.items.slice(5, 9).filter((_, i) => i % 2)] };
+  assert.equal(cueChoices(opening, model.items[0], 'a'), null, 'the start of a scene');
+  assert.equal(cueChoices({ ...own, items: own.items.slice(0, 2) }, own.items[1], 'a'), null);
+});
+
+test('a line said twice has two right cues, so neither is offered as a wrong answer', () => {
+  const item = (index, cue, text = `line ${index}`) => ({ id: `i${index}`, index, scene: 0, speaker: 'A', text, cue: { speaker: 'B', text: cue, notes: [] } });
+  const items = [item(1, 'First cue.', 'Yes.'), item(3, 'Second cue.', 'Yes!'), item(5, 'Third cue.'), item(7, 'Fourth cue.'), item(9, 'Fifth cue.')];
+  for (let turn = 0; turn < 30; turn++) {
+    const q = cueChoices({ items }, items[0], turn);
+    assert.ok(!q.options.includes('Second cue.'));
+    assert.equal(q.options[q.right], 'First cue.');
+  }
 });

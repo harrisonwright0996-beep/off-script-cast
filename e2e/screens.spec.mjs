@@ -541,7 +541,7 @@ test('starting again is not a slip: no dip is mentioned', async ({ page }) => {
 test('lines ready to check: soft words, no count and no promise', async ({ page }) => {
   await enrol(page);
   await page.getByRole('button', { name: 'No, start from the beginning' }).click();
-  await learnt(page, 0.5, { stability: 1, lastTime: Date.now() - 96 * 3600000 });
+  await learnt(page, 0.5, { stability: 1, lastTime: new Date('2026-10-24T12:00:00').getTime() }); // four days before the page's date
   await expect(page.getByText('Some lines are ready for another go.')).toBeVisible();
   await expect(page.locator('body')).not.toContainText('starting to fade');
   await expect(page.locator('body')).not.toContainText('brings');
