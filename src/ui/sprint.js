@@ -4,7 +4,7 @@
 // does something; at time up nothing new comes, only the lines still to finish, then Sprint done.
 import { h, clear, screen, button, announce, focusHeading, num, plural, drawn, settled } from './dom.js';
 import { gainLine, isLearnt, learntPercent } from '../cast/proof.js';
-import { createSession, linesLeft } from '../session.js';
+import { createSession } from '../session.js';
 import { createTypeCheck, onlySlip, sayMisses, makeResult, describeResult, repeatMisses, troubleNote } from '../grade.js';
 import { blankOf, firstLettersOf, gapsOf, lettersShown } from '../tokens.js';
 import { canSpeak, speak, stopSpeaking } from '../tts.js';
@@ -154,7 +154,8 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     if (document.visibilityState === 'visible') elapsed += Math.min(now - last, IDLE_CAP);
     last = now;
   };
-  const timeUp = () => (short ? elapsed >= minutes * 60000 : ctx.practiceToday() >= roundEnd);
+  // A practice or a run they chose goes to its end, however long that takes.
+  const timeUp = () => !practice && !custom && (short ? elapsed >= minutes * 60000 : ctx.practiceToday() >= roundEnd);
 
   let answeredAt = elapsed; // the sprint clock at the last answer
   let hiddenAt = 0; // when the app last went into the background
@@ -569,14 +570,11 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
         ]),
       );
     }
-    const left = chosen ? linesLeft(session.state) : 0;
     // Pupils do several rounds a day. Said lightly: there is no time to spend.
-    const more = !chosen && !custom ? h('p', {}, AGAIN) : null;
+    const more = h('p', {}, AGAIN);
     Promise.all([science(), reminderOffer(ctx)]).then(([note, offer]) =>
-      plain('Round done', [headline(said), left ? h('p', {}, `${plural(left, 'line')} of this ${chosen.run ? 'run through' : 'practice'} still to go.`) : null, more, offer, note], [
-        left
-          ? button('Carry on', act(() => ctx.go('sprint', { practice: 'resume' })), { class: 'btn primary' })
-          : button('Another round', act(() => ctx.go('sprint')), { class: 'btn primary' }),
+      plain('Round done', [headline(said), more, offer, note], [
+        button('Another round', act(() => ctx.go('sprint')), { class: 'btn primary' }),
         button('Back to your lines', act(() => ctx.go('today'))),
       ]),
     );

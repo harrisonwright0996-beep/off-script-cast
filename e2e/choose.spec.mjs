@@ -47,7 +47,7 @@ test('choose what to practise: a scene, every line, read it first; stopped part 
   await expect(page.getByRole('heading', { name: 'Learning', exact: true })).toBeVisible();
 });
 
-test('a chosen practice at time up: Sprint done says what is left, and Carry on goes on with it', async ({ page }) => {
+test('a chosen practice has no time up: it goes on past the end of a round to its last line', async ({ page }) => {
   await importScript(page);
   await page.evaluate(() => (window.offScript.settings.sprintMinutes = 0.02)); // a one second sprint
   const ids = await page.evaluate(() => window.offScript.model.items.map((it) => it.id));
@@ -56,11 +56,23 @@ test('a chosen practice at time up: Sprint done says what is left, and Carry on 
   await page.getByLabel('How much help').selectOption({ label: 'No help' });
   await page.getByRole('button', { name: 'Start' }).click();
   await page.waitForTimeout(1300);
-  expect(await answerCard(page)).toBe('floor'); // from the cue alone; time is up after it
-  await expect(page.getByRole('heading', { name: 'Round done' })).toBeVisible();
-  await expect(page.getByText(`${ids.length - 1} lines of this practice still to go.`)).toBeVisible();
-  await carryOn(page);
-  expect(await cardId(page)).toBe(ids[1]);
+  expect(await answerCard(page)).toBe('floor'); // from the cue alone
+  await expect(page.getByRole('heading', { name: 'Round done' })).toHaveCount(0);
+  for (let i = 0; i < ids.length * 3 && !/done/.test(await page.locator('h1').textContent()); i++) await answerCard(page);
+  await expect(page.getByRole('heading', { name: 'Practice done' })).toBeVisible();
+});
+
+test('a run of a scene has no time up: it goes to the last line of the scene', async ({ page }) => {
+  await importScript(page);
+  await page.evaluate(() => (window.offScript.settings.sprintMinutes = 0.02));
+  const { scene, itemIds } = await page.evaluate(() => {
+    const sc = window.offScript.model.scenes.find((s) => s.itemIds.length > 2);
+    return { scene: sc.index, itemIds: [...sc.itemIds] };
+  });
+  await page.evaluate((custom) => window.offScript.go('sprint', { custom }), { scene, itemIds });
+  await page.waitForTimeout(1300);
+  for (let i = 0; i < itemIds.length * 3 && !/done/i.test(await page.locator('h1').textContent()); i++) await answerCard(page);
+  await expect(page.getByRole('heading', { name: 'Run done' })).toBeVisible();
 });
 
 test('a chosen practice to the end: Practice done, then Choose again with nothing left over', async ({ page }) => {
