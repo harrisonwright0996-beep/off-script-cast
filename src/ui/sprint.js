@@ -1,7 +1,8 @@
 // The sprint: one card at a time from the session (session.js), answered on the keypad (Type) or by
 // tapping the words missed (Say); a card with help on it is always said. Every answer is saved at once,
 // and so is the sprint, so closing the app loses nothing. Time is a slim bar that only moves when he
-// does something; at time up nothing new comes, only the lines still to finish, then Sprint done.
+// does something; at time up nothing new comes, only the lines still to finish, then Sprint done. A
+// scene being run goes on to its end first, except in a Quick go, which keeps to its time.
 import { h, clear, screen, button, announce, focusHeading, num, plural, drawn, settled } from './dom.js';
 import { gainLine, isLearnt, learntPercent } from '../cast/proof.js';
 import { createSession } from '../session.js';
@@ -509,10 +510,10 @@ export async function showSprint(ctx, { scope = 'all', minutes = null, custom = 
     showCard(c);
   }
 
-  // Shows the card `pick` gives. Once time is up nothing new comes: the lines the sprint still owes,
-  // then Sprint done.
+  // Shows the card `pick` gives. Once time is up, at the end of any scene being run, nothing new comes:
+  // the lines the sprint still owes, then Sprint done.
   function carryOn(pick) {
-    if (timeUp()) session.close();
+    if (timeUp() && (short || !session.inScene)) session.close();
     const c = pick();
     if (!c) return session.closing ? timeIsUp() : planDone();
     saveSprint();

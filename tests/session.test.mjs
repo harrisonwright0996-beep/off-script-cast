@@ -460,12 +460,28 @@ test('time up with a line back from its ladder still owed: right from its cue on
   assert.equal(s.advance(), null);
 });
 
-test('time up in a run: the run stops; lines it showed come back on their own, the rest wait', () => {
+test('a Quick go up in a run: the run stops; lines it showed come back on their own, the rest wait', () => {
   const app = fakeApp({ settings: FINAL });
   const ids = app.model.scenes[3].itemIds;
   learn(app, ids, { stability: 1, hoursAgo: 3 });
   const log = play(app, start(app, { scope: 'tests' }), { close: (l) => l.length === 2 });
   assert.deepEqual(log, [`run:help:${ids[0]}`, `run:help:${ids[1]}`, `again:floor:${ids[0]}`, `again:floor:${ids[1]}`]);
+});
+
+test('a scene being run goes on to its end: time up waits until its last line is answered', () => {
+  const app = fakeApp({ settings: FINAL });
+  const ids = app.model.scenes[3].itemIds;
+  learn(app, ids, { stability: 1, hoursAgo: 3 });
+  const s = start(app, { scope: 'tests' });
+  assert.equal(s.inScene, false, 'not started');
+  s.advance();
+  for (const id of ids) {
+    assert.equal(s.card.item.id, id);
+    assert.equal(s.inScene, true, 'under way');
+    answer(app, s, true);
+    if (id !== ids[ids.length - 1]) s.advance();
+  }
+  assert.equal(s.inScene, false, 'its last line is answered');
 });
 
 test('a sprint picked up hours later: lines right earlier come back when the curve says so, with a fresh first go', () => {
