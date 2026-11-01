@@ -189,7 +189,7 @@ export function showSettings(ctx) {
       turning = false;
       await drawReminders(trouble, true);
     }));
-    clear(reminderBox).append(h('p', { class: 'help', role: 'status' }, on ? 'Reminders are on.' : 'Reminders are off.'), problem ? h('p', { class: 'message', role: 'alert' }, problem) : null, toggle);
+    clear(reminderBox).append(...[h('p', { class: 'help', role: 'status' }, on ? 'Reminders are on.' : 'Reminders are off.'), problem ? h('p', { class: 'message', role: 'alert' }, problem) : null, toggle].filter(Boolean));
     if (focus) toggle.focus();
   }
   drawReminders();

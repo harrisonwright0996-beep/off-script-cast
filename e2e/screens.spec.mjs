@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { test, expect, importScript, importPack, answerCard, chooseFile, enrol, open, fakeWorker, CODE, more } from './helpers.mjs';
+import { test, expect, importScript, importPack, answerCard, chooseFile, enrol, open, fakeWorker, CODE, more, strayWords } from './helpers.mjs';
 
 const shot = (page, name) => page.screenshot({ path: `shots/${test.info().project.name}-${name}.png`, fullPage: true });
 
@@ -436,6 +436,20 @@ test('past the last day: everything goes at boot, and it stays gone', async ({ p
   await showOver(page);
   await page.reload();
   await showOver(page);
+});
+
+test('Settings says whether reminders are on, with nothing stray beside it', async ({ page }) => {
+  // Test WebKit has no push, as a phone's browser has before the app is installed.
+  await page.addInitScript(() => {
+    window.PushManager ||= function () {};
+    window.Notification ||= function () {};
+  });
+  await enrol(page);
+  await page.getByRole('button', { name: 'No, start from the beginning' }).click();
+  await more(page, 'Settings');
+  await expect(page.getByText('Reminders are off.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Turn reminders on' })).toBeVisible();
+  expect(await strayWords(page)).toEqual([]);
 });
 
 test('Remove everything tells the worker to forget the reminders first', async ({ page }) => {
